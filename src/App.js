@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://taxipark-production.up.railway.app/api';
 
 const MONTHS = [
   'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun',
