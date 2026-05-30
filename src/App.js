@@ -24,8 +24,8 @@ const createCarIcon = (isOnline, driverName) => L.divIcon({
   popupAnchor: [0, -58],
 });
 
-const API = 'http://localhost:5000/api';
-const SOCKET_URL = 'http://localhost:5000';
+const API = 'https://taxipark-production.up.railway.app/api';
+const SOCKET_URL = 'https://taxipark-production.up.railway.app';
 const VILLAGE_CENTER = [41.292305, 71.665635];
 const TIMEOUT_SECONDS = 60;
 
