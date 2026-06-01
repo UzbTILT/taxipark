@@ -35,6 +35,22 @@ app.get('/', (req, res) => {
   res.json({ message: 'Taxipark backend ishlayapti!' });
 });
 
+// Tizim haqida va Mualliflik ma'lumotlari (Dinamik Brending)
+app.get('/api/system-info', (req, res) => {
+  res.json({
+    success: true,
+    appName: "TaxiPark",
+    version: "1.0.0",
+    buildNumber: "2",
+    developer: {
+      name: "Ermagov Muzaffar",
+      team: "UzbTILT",
+      role: "Loyiha muallifi va bosh dasturchi",
+      copyright: "© 2026 UzbTILT. Barcha huquqlar himoyalangan."
+    }
+  });
+});
+
 // Socket.io
 const connectedDrivers = {};
 
