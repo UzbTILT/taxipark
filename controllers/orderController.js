@@ -13,9 +13,9 @@ const createOrder = async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO orders 
-       (customer_phone, from_address, base_price, total_price)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
+        (customer_phone, from_address, base_price, total_price)
+        VALUES ($1, $2, $3, $4)
+        RETURNING *`,
       [customer_phone, from_address, base_price, base_price]
     );
 
@@ -49,6 +49,7 @@ const startOrder = async (req, res) => {
   try {
     const { order_id } = req.body;
 
+    // Tuzatish: SQL parametrlar tartibi to'g'rilandi
     await pool.query(
       'UPDATE orders SET status = $1, started_at = NOW(), driver_id = $2 WHERE id = $3',
       ['started', req.driver.id, order_id]
@@ -63,11 +64,17 @@ const startOrder = async (req, res) => {
 // Buyurtmani tugatish — narx backendda hisoblanadi
 const finishOrder = async (req, res) => {
   try {
-    const { order_id, distance_km, pause_minutes, extra_price } = req.body;
+    const { order_id, distance_km, pause_minutes, extra_price, extra_services } = req.body;
 
-    const now = new Date();
-    const hour = now.getHours();
-    const isNight = hour >= 18 || hour < 6;
+    // 1. VAQTNI TOSHKENТ SOATIGA O'GIRISH (0-23 raqam qaytaradi)
+    const tashkentHour = parseInt(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent", hour: "2-digit", hour12: false })
+    );
+
+    // 2. SIZ AYTGAN VAQT CHEGARA SHARTI:
+    // Kunduzi: 06:00 dan 18:00 gacha (ya'ni soat 6 dan 17 gacha bo'lgan vaqt)
+    // Kechasi: 18:01 dan 05:59 gacha (ya'ni soat 18 va undan katta yoki soat 6 dan kichik bo'lsa)
+    const isNight = tashkentHour >= 18 || tashkentHour < 6;
 
     const BASE_PRICE = 500;
     const km = parseFloat(distance_km) || 0;
@@ -82,8 +89,7 @@ const finishOrder = async (req, res) => {
       else if (km <= 2) totalKmPrice = 6000 + (km - 1) * 5000;
       else if (km <= 3) totalKmPrice = 6000 + 5000 + (km - 2) * 4000;
       else if (km <= 4) totalKmPrice = 6000 + 5000 + 4000 + (km - 3) * 3000;
-      else if (km <= 5) totalKmPrice = 6000 + 5000 + 4000 + 3000 + (km - 4) * 2000;
-      else              totalKmPrice = 6000 + 5000 + 4000 + 3000 + 2000 + (km - 5) * 2000;
+      else              totalKmPrice = 6000 + 5000 + 4000 + 3000 + (km - 4) * 2000;
     } else {
       // Kunduz: 1km=4000, 2km=3000, 3km+=2000
       if (km <= 1)      totalKmPrice = km * 4000;
@@ -98,8 +104,8 @@ const finishOrder = async (req, res) => {
     const total_price = Math.round(BASE_PRICE + totalKmPrice + pausePrice + extraAmount);
 
     await pool.query(
-      'UPDATE orders SET status = $1, finished_at = NOW(), total_price = $2 WHERE id = $3',
-      ['finished', total_price, order_id]
+      'UPDATE orders SET status = $1, finished_at = NOW(), total_price = $2, extra_services = $3 WHERE id = $4',
+      ['finished', total_price, JSON.stringify(extra_services || []), order_id]
     );
 
     res.json({
@@ -109,7 +115,8 @@ const finishOrder = async (req, res) => {
       pause_minutes: pauseMin,
       pause_price: pausePrice,
       extra_price: extraAmount,
-      is_night: isNight
+      is_night: isNight,
+      tashkent_hour: tashkentHour
     });
   } catch (error) {
     res.status(500).json({ message: 'Server xatosi!', error: error.message });
