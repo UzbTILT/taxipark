@@ -21,12 +21,14 @@ const driverRoutes = require('./routes/driverRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/order', orderRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/message', messageRoutes);
 
 // Test uchun
 app.get('/', (req, res) => {
@@ -38,17 +40,15 @@ const connectedDrivers = {};
 
 io.on('connection', (socket) => {
   console.log('Ulandi:', socket.id);
-  // Haydovchi rad etdi — dispetcherga xabar
-socket.on('order_rejected', (data) => {
-  console.log('Zakaz rad etildi:', data);
-  // Barcha dispetcherlarga yuborish
-  io.emit('order_rejected', {
-    order_id: data.order_id,
-    driver_name: data.driver_name
-  });
-});
 
-  // Haydovchi o'zini tanishtiradi
+  socket.on('order_rejected', (data) => {
+    console.log('Zakaz rad etildi:', data);
+    io.emit('order_rejected', {
+      order_id: data.order_id,
+      driver_name: data.driver_name
+    });
+  });
+
   socket.on('driver_connected', (driverId) => {
     connectedDrivers[driverId] = socket.id;
     console.log('Haydovchi ulandi:', driverId);
@@ -62,12 +62,11 @@ socket.on('order_rejected', (data) => {
     });
   });
 });
-// server port
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server ${PORT} portda ishlayapti!`);
 });
 
-// Global io ni export qilamiz
 global.io = io;
 global.connectedDrivers = connectedDrivers;

@@ -19,9 +19,6 @@ const createOrder = async (req, res) => {
       [customer_phone, from_address, base_price, base_price]
     );
 
-    // ❌ Bu yerda socket YUBORILMAYDI — faqat dispetcher ko'radi
-    // Haydovchiga faqat "Yuborish" tugmasidan signal ketadi
-
     res.status(201).json({
       message: 'Buyurtma yaratildi!',
       order: result.rows[0]
@@ -31,7 +28,7 @@ const createOrder = async (req, res) => {
   }
 };
 
-// Buyurtmani haydovchiga yuborish (faqat status o'zgartiradi)
+// Buyurtmani haydovchiga yuborish
 const assignOrder = async (req, res) => {
   try {
     const { order_id, driver_id } = req.body;
@@ -63,23 +60,63 @@ const startOrder = async (req, res) => {
   }
 };
 
-// Buyurtmani tugatish (haydovchi)
+// Buyurtmani tugatish — narx backendda hisoblanadi
 const finishOrder = async (req, res) => {
   try {
-    const { order_id, total_price } = req.body;
+    const { order_id, distance_km, pause_minutes, extra_price } = req.body;
+
+    const now = new Date();
+    const hour = now.getHours();
+    const isNight = hour >= 18 || hour < 6;
+
+    const BASE_PRICE = 500;
+    const km = parseFloat(distance_km) || 0;
+    const pauseMin = parseFloat(pause_minutes) || 0;
+
+    // Km narx hisoblash (regressive tarif)
+    let totalKmPrice = 0;
+
+    if (isNight) {
+      // Tun: 1km=6000, 2km=5000, 3km=4000, 4km=3000, 5km+=2000
+      if (km <= 1)      totalKmPrice = km * 6000;
+      else if (km <= 2) totalKmPrice = 6000 + (km - 1) * 5000;
+      else if (km <= 3) totalKmPrice = 6000 + 5000 + (km - 2) * 4000;
+      else if (km <= 4) totalKmPrice = 6000 + 5000 + 4000 + (km - 3) * 3000;
+      else if (km <= 5) totalKmPrice = 6000 + 5000 + 4000 + 3000 + (km - 4) * 2000;
+      else              totalKmPrice = 6000 + 5000 + 4000 + 3000 + 2000 + (km - 5) * 2000;
+    } else {
+      // Kunduz: 1km=4000, 2km=3000, 3km+=2000
+      if (km <= 1)      totalKmPrice = km * 4000;
+      else if (km <= 2) totalKmPrice = 4000 + (km - 1) * 3000;
+      else              totalKmPrice = 4000 + 3000 + (km - 2) * 2000;
+    }
+
+    // Pauza narxi: har 1 daqiqa = 200 so'm
+    const pausePrice = Math.round(pauseMin * 200);
+
+    const extraAmount = parseFloat(extra_price) || 0;
+    const total_price = Math.round(BASE_PRICE + totalKmPrice + pausePrice + extraAmount);
 
     await pool.query(
       'UPDATE orders SET status = $1, finished_at = NOW(), total_price = $2 WHERE id = $3',
       ['finished', total_price, order_id]
     );
 
-    res.json({ message: 'Reys tugadi!', total_price });
+    res.json({
+      message: 'Reys tugadi!',
+      total_price,
+      distance_km: km,
+      pause_minutes: pauseMin,
+      pause_price: pausePrice,
+      extra_price: extraAmount,
+      is_night: isNight
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server xatosi!', error: error.message });
   }
 };
 
-// ✅ YANGI — Zakazni qabul qilish (haydovchi QABUL QILISH tugmasini bosadi)
+// Zakazni qabul qilish
 const acceptOrder = async (req, res) => {
   try {
     const { order_id } = req.body;
@@ -95,7 +132,39 @@ const acceptOrder = async (req, res) => {
   }
 };
 
-// Haydovchi buyurtmalarini olish
+// Zakazni rad etish
+const rejectOrder = async (req, res) => {
+  try {
+    const { order_id } = req.body;
+
+    const orderResult = await pool.query(
+      `SELECT orders.*, drivers.full_name as driver_name 
+       FROM orders 
+       JOIN drivers ON orders.driver_id = drivers.id 
+       WHERE orders.id = $1`,
+      [order_id]
+    );
+    const order = orderResult.rows[0];
+
+    await pool.query(
+      'UPDATE orders SET status = $1, driver_id = NULL WHERE id = $2',
+      ['new', order_id]
+    );
+
+    if (global.io) {
+      global.io.emit('order_rejected', {
+        order_id: order_id,
+        driver_name: order?.driver_name || 'Haydovchi'
+      });
+    }
+
+    res.json({ message: 'Zakaz rad etildi!' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server xatosi!', error: error.message });
+  }
+};
+
+// Haydovchi buyurtmalari tarixi
 const getDriverOrders = async (req, res) => {
   try {
     const result = await pool.query(
@@ -133,12 +202,10 @@ const sendToDriver = async (req, res) => {
     );
     const order = orderResult.rows[0];
 
-    // Faqat o'sha haydovchiga socket yuborish
     if (global.connectedDrivers && global.connectedDrivers[driver_id]) {
       global.io.to(global.connectedDrivers[driver_id]).emit('new_order', order);
     }
 
-    // ✅ 1 daqiqada qabul qilmasa (status hali 'assigned') — hammaga yuborish
     setTimeout(async () => {
       const check = await pool.query(
         'SELECT * FROM orders WHERE id = $1 AND status = $2',
@@ -151,53 +218,21 @@ const sendToDriver = async (req, res) => {
         );
         global.io.emit('new_order', order);
       }
-    }, 1 * 60 * 1000); // ✅ 1 daqiqa (oldin 5 daqiqa edi)
+    }, 1 * 60 * 1000);
 
     res.json({ message: 'Haydovchiga yuborildi!' });
   } catch (error) {
     res.status(500).json({ message: 'Server xatosi!', error: error.message });
   }
 };
-const rejectOrder = async (req, res) => {
-  try {
-    const { order_id } = req.body;
 
-    // Haydovchi ismini olamiz
-    const orderResult = await pool.query(
-      `SELECT orders.*, drivers.full_name as driver_name 
-       FROM orders 
-       JOIN drivers ON orders.driver_id = drivers.id 
-       WHERE orders.id = $1`,
-      [order_id]
-    );
-    const order = orderResult.rows[0];
-
-    // Status yangilash
-    await pool.query(
-      'UPDATE orders SET status = $1, driver_id = NULL WHERE id = $2',
-      ['new', order_id]
-    );
-
-    // ✅ Backend orqali dispetcherga socket xabar
-    if (global.io) {
-      global.io.emit('order_rejected', {
-        order_id: order_id,
-        driver_name: order?.driver_name || 'Haydovchi'
-      });
-    }
-
-    res.json({ message: 'Zakaz rad etildi!' });
-  } catch (error) {
-    res.status(500).json({ message: 'Server xatosi!', error: error.message });
-  }
-};
 module.exports = {
   createOrder,
   assignOrder,
   startOrder,
   finishOrder,
   acceptOrder,
-  rejectOrder,  // ✅ YANGI
+  rejectOrder,
   getDriverOrders,
   getAllOrders,
   sendToDriver
