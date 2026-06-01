@@ -76,6 +76,7 @@ export default function App() {
 
   // Yon panel
   const [sidePanel, setSidePanel] = useState(null); // null | 'stats' | 'history' | 'block' | 'broadcast'
+  const [showAbout, setShowAbout] = useState(false);
 
   // Statistika
   const [statPeriod, setStatPeriod] = useState('today');
@@ -385,15 +386,45 @@ export default function App() {
           </button>
           <h1 className="text-2xl font-bold">🚖 TaxiPark Dispetcher Panel</h1>
         </div>
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
           <span className="bg-green-500 px-3 py-1 rounded-full text-sm font-bold">
             🟢 Online: {drivers.filter(d => d.is_online).length}
           </span>
           <span className="bg-orange-500 px-3 py-1 rounded-full text-sm font-bold">
             📋 Yangi: {orders.filter(o => o.status === 'new').length}
           </span>
+          <button
+            onClick={() => setShowAbout(true)}
+            className="bg-blue-500 hover:bg-blue-400 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm transition"
+            title="Haqida"
+          >
+            ℹ️
+          </button>
         </div>
       </div>
+
+      {/* HAQIDA MODALI */}
+      {showAbout && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 text-center">
+            <p className="text-5xl mb-4">🚖</p>
+            <h2 className="text-2xl font-bold text-blue-600 mb-1">TaxiPark</h2>
+            <p className="text-gray-400 text-sm mb-6">v1.0.0 — Build 2</p>
+            <div className="bg-gray-50 rounded-xl p-4 mb-6 text-left space-y-2">
+              <p className="text-sm"><span className="font-bold text-gray-600">👤 Muallif:</span> Ermagov Muzaffar</p>
+              <p className="text-sm"><span className="font-bold text-gray-600">👥 Jamoa:</span> UzbTILT</p>
+              <p className="text-sm"><span className="font-bold text-gray-600">💼 Rol:</span> Loyiha muallifi va bosh dasturchi</p>
+            </div>
+            <p className="text-xs text-gray-400 mb-6">© 2026 UzbTILT. Barcha huquqlar himoyalangan.</p>
+            <button
+              onClick={() => setShowAbout(false)}
+              className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition"
+            >
+              Yopish
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex">
 
