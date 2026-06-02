@@ -90,7 +90,13 @@ export default function App() {
       localStorage.setItem('disp_user', JSON.stringify(data.dispatcher));
       setDispToken(data.token);
       setDispUser(data.dispatcher);
-    } catch (err) { alert(err.message || 'Login xatosi!'); }
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+        alert(`Server bilan bog'lanib bo'lmadi!\nURL: ${API}\n\nBrowser console'ni tekshiring (F12).`);
+      } else {
+        alert(err.message || 'Login xatosi!');
+      }
+    }
   };
 
   const handleRegister = async () => {
@@ -106,7 +112,13 @@ export default function App() {
       alert('Muvaffaqiyatli ro\'yxatdan o\'tildi! Kiring.');
       setAuthScreen('login');
       setRegForm({ username: '', password: '', full_name: '' });
-    } catch (err) { alert(err.message || 'Ro\'yxatdan o\'tishda xato!'); }
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+        alert(`Server bilan bog'lanib bo'lmadi!\nURL: ${API}\n\nEhtimoliy sabablar:\n1. Backend ishlamayapti\n2. CORS xatosi\n\nBrowser console'ni tekshiring (F12).`);
+      } else {
+        alert(err.message || 'Ro\'yxatdan o\'tishda xato!');
+      }
+    }
   };
 
   const handleLogout = () => {
@@ -152,12 +164,13 @@ export default function App() {
   const socketRef = useRef(null);
 
   useEffect(() => {
+    if (!dispToken) return;
     fetchOrders();
     fetchDrivers();
     // Haydovchi lokatsiyalari uchun 10 sekundda bir yangilaymiz
     const interval = setInterval(() => fetchDrivers(), 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [dispToken]);
 
   useEffect(() => {
     socketRef.current = io(SOCKET_URL);
@@ -198,7 +211,7 @@ export default function App() {
     try {
       const res = await fetch(`${API}/order/all?active=true`, { headers: getDispHeaders() });
       const data = await res.json();
-      setOrders(data.orders);
+      setOrders(Array.isArray(data.orders) ? data.orders : []);
     } catch (err) {
       console.error('Buyurtmalarni yuklashda xato:', err);
     }
@@ -208,7 +221,7 @@ export default function App() {
     try {
       const res = await fetch(`${API}/admin/drivers`, { headers: ADMIN_HEADERS });
       const data = await res.json();
-      setDrivers(data.drivers);
+      setDrivers(Array.isArray(data.drivers) ? data.drivers : []);
     } catch (err) {
       console.error('Haydovchilarni yuklashda xato:', err);
     }
