@@ -137,6 +137,9 @@ export default function App() {
   const [regCar, setRegCar] = useState('');
   const [regCarNumber, setRegCarNumber] = useState('');
 
+  // Tarif
+  const [pendingTariff, setPendingTariff] = useState(null); // tanlangan lekin faollashtirilmagan tarif
+
   const timerRef = useRef(null);
   const pauseTimerRef = useRef(null);
   const locationRef = useRef(null);
@@ -155,17 +158,22 @@ export default function App() {
   useEffect(() => { driverRef.current = driver; }, [driver]);
   useEffect(() => { tokenRef.current = token; }, [token]);
 
-  // Bloklangan haydovchini avtomatik chiqarish
+  // Bloklangan / tarifi tugagan haydovchini ushlash
   useEffect(() => {
     const interceptor = axios.interceptors.response.use(
       response => response,
       async error => {
         if (error.response?.status === 403) {
-          await AsyncStorage.clear();
-          setToken(null); setDriver(null); setIsOnline(false);
-          setIncomingOrder(null); setAcceptedOrder(null); setIsRiding(false);
-          setScreen('login');
-          Alert.alert('🔴 Hisob bloklangan!', 'Hisobingiz admin tomonidan bloklangan. Adminga murojaat qiling.');
+          if (error.response?.data?.tariff_expired) {
+            // Tarifni yangilash ekraniga o'tkazish
+            setScreen('tariff_select');
+          } else {
+            await AsyncStorage.clear();
+            setToken(null); setDriver(null); setIsOnline(false);
+            setIncomingOrder(null); setAcceptedOrder(null); setIsRiding(false);
+            setScreen('login');
+            Alert.alert('🔴 Hisob bloklangan!', 'Hisobingiz admin tomonidan bloklangan. Adminga murojaat qiling.');
+          }
         }
         return Promise.reject(error);
       }
@@ -187,6 +195,19 @@ export default function App() {
       });
       socketRef.current.on('broadcast_message', () => {
         fetchMessages();
+      });
+
+      // Tarif faollashtirildi
+      socketRef.current.on('tariff_activated', async (data) => {
+        const stored = await AsyncStorage.getItem('driver');
+        if (stored) {
+          const d = { ...JSON.parse(stored), tariff_type: data.tariff_type, tariff_expires_at: data.tariff_expires_at };
+          await AsyncStorage.setItem('driver', JSON.stringify(d));
+          setDriver(d);
+          driverRef.current = d;
+        }
+        setScreen('home');
+        Alert.alert('✅ Tarif faollashtirildi!', `${data.tariff_type === 'half_day' ? 'Yarim kunlik' : data.tariff_type === 'daily' ? 'Kunlik' : data.tariff_type === 'monthly' ? 'Oylik' : 'Donali'} tarif faol.`);
       });
 
       // Tizim o'chirildi
@@ -300,6 +321,13 @@ export default function App() {
     } catch (e) {}
   };
 
+  const getTariffScreen = (d) => {
+    if (!d.tariff_type) return 'tariff_select';
+    if (d.tariff_type === 'per_order') return 'home';
+    if (!d.tariff_expires_at || new Date(d.tariff_expires_at) < new Date()) return 'tariff_select';
+    return 'home';
+  };
+
   const checkToken = async () => {
     const t = await AsyncStorage.getItem('token');
     const d = await AsyncStorage.getItem('driver');
@@ -307,7 +335,7 @@ export default function App() {
       const parsedDriver = JSON.parse(d);
       setToken(t); setDriver(parsedDriver);
       driverRef.current = parsedDriver; tokenRef.current = t;
-      setScreen('home');
+      setScreen(getTariffScreen(parsedDriver));
       fetchMessages();
       registerForPushNotifications(t);
     }
@@ -316,11 +344,12 @@ export default function App() {
   const login = async () => {
     try {
       const res = await axios.post(`${API}/auth/login`, { phone, password });
+      const d = res.data.driver;
       await AsyncStorage.setItem('token', res.data.token);
-      await AsyncStorage.setItem('driver', JSON.stringify(res.data.driver));
-      setToken(res.data.token); setDriver(res.data.driver);
-      driverRef.current = res.data.driver; tokenRef.current = res.data.token;
-      setScreen('home');
+      await AsyncStorage.setItem('driver', JSON.stringify(d));
+      setToken(res.data.token); setDriver(d);
+      driverRef.current = d; tokenRef.current = res.data.token;
+      setScreen(getTariffScreen(d));
       fetchMessages();
       registerForPushNotifications(res.data.token);
     } catch (err) {
@@ -701,6 +730,97 @@ export default function App() {
       </View>
     </Modal>
   );
+
+  // ===================== TARIF TANLASH =====================
+  if (screen === 'tariff_select') {
+    const PLANS = [
+      { id: 'per_order', name: 'Donali',       price: 'Bepul',          sub: 'Har reysdan 900 so\'m', color: '#6b7280' },
+      { id: 'half_day',  name: 'Yarim kunlik', price: '11 000 so\'m',   sub: '12 soat',              color: '#2563eb' },
+      { id: 'daily',     name: 'Kunlik',       price: '22 000 so\'m',   sub: '24 soat',              color: '#16a34a' },
+      { id: 'monthly',   name: 'Oylik',        price: '29 900 so\'m',   sub: '30 kun',               color: '#7c3aed' },
+    ];
+
+    const handleSelectTariff = async (plan) => {
+      try {
+        const res = await axios.post(`${API}/auth/select-tariff`,
+          { tariff_type: plan.id },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (plan.id === 'per_order') {
+          const d = { ...driver, tariff_type: 'per_order', tariff_expires_at: null };
+          await AsyncStorage.setItem('driver', JSON.stringify(d));
+          setDriver(d); driverRef.current = d;
+          setScreen('home');
+        } else {
+          setPendingTariff(plan);
+          setScreen('tariff_pending');
+        }
+      } catch (err) {
+        Alert.alert('Xato!', err.response?.data?.message || 'Xato yuz berdi');
+      }
+    };
+
+    return (
+      <ScrollView contentContainerStyle={[styles.container, { paddingTop: 60 }]}>
+        <Text style={styles.title}>🚖 TaxiPark</Text>
+        <Text style={[styles.subtitle, { marginBottom: 8 }]}>Tarif rejasini tanlang</Text>
+        {driver?.tariff_type && driver.tariff_type !== 'per_order' && (
+          <View style={{ backgroundColor: '#fef2f2', borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#fca5a5' }}>
+            <Text style={{ color: '#dc2626', fontWeight: 'bold', textAlign: 'center' }}>⏰ Tarifingiz tugadi!</Text>
+            <Text style={{ color: '#dc2626', fontSize: 12, textAlign: 'center', marginTop: 4 }}>Yangi tarif tanlang yoki dispetcherga murojaat qiling: 1054</Text>
+          </View>
+        )}
+        {PLANS.map(plan => (
+          <TouchableOpacity
+            key={plan.id}
+            style={{ backgroundColor: 'white', borderRadius: 14, padding: 18, marginBottom: 12, borderWidth: 2, borderColor: plan.color, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+            onPress={() => handleSelectTariff(plan)}
+          >
+            <View>
+              <Text style={{ fontWeight: 'bold', fontSize: 16, color: plan.color }}>{plan.name}</Text>
+              <Text style={{ color: '#6b7280', fontSize: 13, marginTop: 2 }}>{plan.sub}</Text>
+            </View>
+            <Text style={{ fontWeight: 'bold', fontSize: 16, color: plan.color }}>{plan.price}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity onPress={logout} style={[styles.linkBtn, { marginTop: 8 }]}>
+          <Text style={[styles.linkText, { color: '#ef4444' }]}>Chiqish</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  // ===================== TARIF KUTISH =====================
+  if (screen === 'tariff_pending') {
+    return (
+      <View style={[styles.container, { paddingHorizontal: 24 }]}>
+        <Text style={{ fontSize: 64, textAlign: 'center', marginBottom: 16 }}>⏳</Text>
+        <Text style={[styles.title, { fontSize: 22 }]}>To'lovni tasdiqlang</Text>
+        <View style={{ backgroundColor: '#f0fdf4', borderRadius: 14, padding: 20, marginBottom: 20, width: '100%', borderWidth: 1, borderColor: '#86efac' }}>
+          <Text style={{ fontWeight: 'bold', fontSize: 16, color: '#16a34a', marginBottom: 8 }}>
+            {pendingTariff?.name} — {pendingTariff?.price}
+          </Text>
+          <Text style={{ color: '#374151', fontSize: 14, lineHeight: 22 }}>
+            1. {pendingTariff?.price} so'm to'lang{'\n'}
+            2. Quyidagi raqamga qo'ng'iroq qiling:{'\n'}
+            3. Ismingiz va "Tarifimni faollashtiring" deng
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={{ backgroundColor: '#16a34a', borderRadius: 14, paddingVertical: 18, paddingHorizontal: 32, marginBottom: 12, width: '100%', alignItems: 'center' }}
+          onPress={() => Linking.openURL('tel:1054')}
+        >
+          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>📞 1054 ga qo'ng'iroq</Text>
+        </TouchableOpacity>
+        <Text style={{ color: '#9ca3af', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
+          Dispetcher tarifingizni faollashtirganidan so'ng ilova avtomatik ochiladi
+        </Text>
+        <TouchableOpacity onPress={() => setScreen('tariff_select')} style={styles.linkBtn}>
+          <Text style={styles.linkText}>← Tarif tanlashga qaytish</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   // ===================== LOGIN =====================
   if (screen === 'login') {
