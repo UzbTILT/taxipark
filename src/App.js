@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 
-const API = 'https://taxipark-production.up.railway.app/api';
+const API = process.env.REACT_APP_API_URL || 'https://taxipark-production.up.railway.app/api';
+const ADMIN_HEADERS = {
+  'Content-Type': 'application/json',
+  'x-admin-key': process.env.REACT_APP_ADMIN_KEY || '',
+};
 
 export default function App() {
   const [systemOnline, setSystemOnline] = useState(true);
@@ -12,7 +16,7 @@ export default function App() {
 
   const fetchStatus = async () => {
     try {
-      const res = await fetch(`${API}/admin/system-status`);
+      const res = await fetch(`${API}/admin/system-status`, { headers: ADMIN_HEADERS });
       const data = await res.json();
       setSystemOnline(data.is_online);
     } catch (err) {}
@@ -29,7 +33,7 @@ export default function App() {
     try {
       await fetch(`${API}/admin/system-toggle`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ADMIN_HEADERS,
         body: JSON.stringify({ is_online: !systemOnline })
       });
       setSystemOnline(!systemOnline);
