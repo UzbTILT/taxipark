@@ -2,18 +2,52 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const socketio = require('socket.io');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const pool = require('./config/db');
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : [];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS: ${origin} ruxsatsiz`));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+};
+
 const app = express();
 const server = http.createServer(app);
 const io = socketio(server, {
-  cors: { origin: '*' }
+  cors: corsOptions,
 });
 
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// Umumiy limit — har bir IP uchun 1 daqiqada max 100 ta so'rov
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  message: { message: 'Juda ko\'p so\'rov yuborildi. 1 daqiqadan keyin qayta urining.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
+
+// Login uchun qattiqroq limit — 10 daqiqada max 10 ta urinish
+const loginLimit = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: { message: 'Juda ko\'p login urinish. 10 daqiqadan keyin qayta urining.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Routes
 const authRoutes = require('./routes/authRoutes');
@@ -23,7 +57,7 @@ const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', loginLimit, authRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/order', orderRoutes);
 app.use('/api/payment', paymentRoutes);

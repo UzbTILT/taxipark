@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const dispatcherMiddleware = require('../middleware/dispatcherMiddleware');
 const {
   createOrder,
   assignOrder,
@@ -14,13 +15,13 @@ const {
 } = require('../controllers/orderController');
 
 // Dispetcher - yangi buyurtma yaratish
-router.post('/create', createOrder);
+router.post('/create', dispatcherMiddleware, createOrder);
 
 // Dispetcher - haydovchiga buyurtma yuborish
-router.post('/assign', assignOrder);
+router.post('/assign', dispatcherMiddleware, assignOrder);
 
 // Dispetcher - barcha buyurtmalar
-router.get('/all', getAllOrders);
+router.get('/all', dispatcherMiddleware, getAllOrders);
 
 // Haydovchi - zakazni qabul qilish
 router.post('/accept', authMiddleware, acceptOrder);
@@ -38,6 +39,6 @@ router.post('/finish', authMiddleware, finishOrder);
 router.get('/my-orders', authMiddleware, getDriverOrders);
 
 // Faqat bir haydovchiga yuborish
-router.post('/send-to-driver', sendToDriver);
+router.post('/send-to-driver', dispatcherMiddleware, sendToDriver);
 
 module.exports = router;
