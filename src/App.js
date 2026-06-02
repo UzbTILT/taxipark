@@ -128,6 +128,8 @@ export default function App() {
     setDispUser(null);
   };
 
+  const [systemBlocked, setSystemBlocked] = useState(false);
+
   const [orders, setOrders] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [nearestDrivers, setNearestDrivers] = useState([]);
@@ -175,7 +177,6 @@ export default function App() {
   useEffect(() => {
     socketRef.current = io(SOCKET_URL);
 
-    // Buyurtma holati o'zgarganda — darhol yangilash
     socketRef.current.on('orders_updated', () => fetchOrders());
 
     socketRef.current.on('order_rejected', (data) => {
@@ -186,6 +187,20 @@ export default function App() {
       fetchOrders();
       setTimeout(() => setRejectedMsg(null), 5000);
     });
+
+    socketRef.current.on('system_offline', () => {
+      setSystemBlocked(true);
+      stopAllTimers();
+      setSentOrder(null);
+      setCountdown(0);
+    });
+
+    socketRef.current.on('system_online', () => {
+      setSystemBlocked(false);
+      fetchOrders();
+      fetchDrivers();
+    });
+
     return () => { if (socketRef.current) socketRef.current.disconnect(); };
   }, []);
 
@@ -211,6 +226,11 @@ export default function App() {
     try {
       const res = await fetch(`${API}/order/all?active=true`, { headers: getDispHeaders() });
       const data = await res.json();
+      if (res.status === 503 && data.system_offline) {
+        setSystemBlocked(true);
+        return;
+      }
+      setSystemBlocked(false);
       setOrders(Array.isArray(data.orders) ? data.orders : []);
     } catch (err) {
       console.error('Buyurtmalarni yuklashda xato:', err);
@@ -448,6 +468,27 @@ export default function App() {
     const d = new Date(dateStr);
     return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()} ${d.getHours()}:${d.getMinutes() < 10 ? '0' : ''}${d.getMinutes()}`;
   };
+
+  // ===================== TIZIM O'CHIQ EKRANI =====================
+  if (dispToken && systemBlocked) {
+    return (
+      <div className="min-h-screen bg-red-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-xl p-10 w-full max-w-sm text-center border-2 border-red-300">
+          <p className="text-7xl mb-4">🔴</p>
+          <h2 className="text-2xl font-bold text-red-600 mb-2">Tizim o'chirilgan</h2>
+          <p className="text-gray-500 text-sm mb-6">
+            Admin tomonidan bloklangan.<br />Tizim yoqilishini kuting.
+          </p>
+          <button
+            onClick={handleLogout}
+            className="w-full bg-gray-200 text-gray-600 py-3 rounded-lg font-bold hover:bg-gray-300 transition text-sm"
+          >
+            Chiqish
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ===================== AUTH EKRANI =====================
   if (!dispToken) {
