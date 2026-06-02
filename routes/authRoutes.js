@@ -25,7 +25,7 @@ router.post('/select-tariff', tokenMiddleware, async (req, res) => {
 
     // To'lovli tarif — dispetcher faollashtiradi, hozircha null saqlanadi
     return res.json({
-      message: `${plan.name} tarifi tanlandi. To'lovdan so'ng 1054 ga qo'ng'iroq qiling.`,
+      message: `${plan.name} tarifi tanlandi. To'lovdan so'ng dispetcherga murojaat qiling.`,
       tariff_type: null,
       pending: tariff_type,
     });

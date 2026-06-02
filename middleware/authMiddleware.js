@@ -25,7 +25,7 @@ const authMiddleware = async (req, res, next) => {
     if (driver.tariff_type && driver.tariff_type !== 'per_order') {
       if (!driver.tariff_expires_at || new Date(driver.tariff_expires_at) < new Date()) {
         return res.status(403).json({
-          message: 'Tarifingiz tugadi! Dispetcherga murojaat qiling: 1054',
+          message: 'Tarifingiz tugadi! Dispetcherga murojaat qiling.',
           tariff_expired: true,
         });
       }
