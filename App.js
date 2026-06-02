@@ -767,7 +767,7 @@ export default function App() {
         {driver?.tariff_type && driver.tariff_type !== 'per_order' && (
           <View style={{ backgroundColor: '#fef2f2', borderRadius: 10, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: '#fca5a5' }}>
             <Text style={{ color: '#dc2626', fontWeight: 'bold', textAlign: 'center' }}>⏰ Tarifingiz tugadi!</Text>
-            <Text style={{ color: '#dc2626', fontSize: 12, textAlign: 'center', marginTop: 4 }}>Yangi tarif tanlang yoki dispetcherga murojaat qiling: 1054</Text>
+            <Text style={{ color: '#dc2626', fontSize: 12, textAlign: 'center', marginTop: 4 }}>Yangi tarif tanlang yoki dispetcherga murojaat qiling</Text>
           </View>
         )}
         {PLANS.map(plan => (
@@ -806,15 +806,11 @@ export default function App() {
             3. Ismingiz va "Tarifimni faollashtiring" deng
           </Text>
         </View>
-        <TouchableOpacity
-          style={{ backgroundColor: '#16a34a', borderRadius: 14, paddingVertical: 18, paddingHorizontal: 32, marginBottom: 12, width: '100%', alignItems: 'center' }}
-          onPress={() => Linking.openURL('tel:1054')}
-        >
-          <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 20 }}>📞 1054 ga qo'ng'iroq</Text>
-        </TouchableOpacity>
-        <Text style={{ color: '#9ca3af', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
-          Dispetcher tarifingizni faollashtirganidan so'ng ilova avtomatik ochiladi
-        </Text>
+        <View style={{ backgroundColor: '#f0fdf4', borderRadius: 12, padding: 16, marginBottom: 20, width: '100%', borderWidth: 1, borderColor: '#86efac' }}>
+          <Text style={{ color: '#15803d', fontSize: 14, textAlign: 'center', lineHeight: 22 }}>
+            To'lovni amalga oshirib, dispetcherga murojaat qiling.{'\n'}Tarif faollashtirilgandan so'ng ilova avtomatik ochiladi.
+          </Text>
+        </View>
         <TouchableOpacity onPress={() => setScreen('tariff_select')} style={styles.linkBtn}>
           <Text style={styles.linkText}>← Tarif tanlashga qaytish</Text>
         </TouchableOpacity>
