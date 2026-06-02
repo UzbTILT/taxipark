@@ -160,6 +160,10 @@ export default function App() {
   const [broadcastMsg, setBroadcastMsg] = useState('');
   const [broadcastSent, setBroadcastSent] = useState(false);
 
+  // Tariflar
+  const [tariffDrivers, setTariffDrivers] = useState([]);
+  const [activatingTariff, setActivatingTariff] = useState(null);
+
   const countdownRef = useRef(null);
   const autoSendRef = useRef(null);
   const statusCheckerRef = useRef(null);
@@ -216,6 +220,7 @@ export default function App() {
   useEffect(() => {
     if (sidePanel === 'stats') fetchStats(statPeriod);
     if (sidePanel === 'history') fetchHistory();
+    if (sidePanel === 'tariffs') fetchTariffDrivers();
   }, [sidePanel]);
 
   useEffect(() => {
@@ -234,6 +239,34 @@ export default function App() {
       setOrders(Array.isArray(data.orders) ? data.orders : []);
     } catch (err) {
       console.error('Buyurtmalarni yuklashda xato:', err);
+    }
+  };
+
+  const fetchTariffDrivers = async () => {
+    try {
+      const res = await fetch(`${API}/admin/drivers`, { headers: ADMIN_HEADERS });
+      const data = await res.json();
+      setTariffDrivers(Array.isArray(data.drivers) ? data.drivers : []);
+    } catch (err) {
+      console.error('Tarif haydovchilari xato:', err);
+    }
+  };
+
+  const activateTariff = async (driverId, tariffType) => {
+    try {
+      const res = await fetch(`${API}/admin/driver/${driverId}/activate-tariff`, {
+        method: 'POST',
+        headers: ADMIN_HEADERS,
+        body: JSON.stringify({ tariff_type: tariffType }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      alert('✅ ' + data.message);
+      setActivatingTariff(null);
+      fetchTariffDrivers();
+      fetchDrivers();
+    } catch (err) {
+      alert(err.message || 'Xato!');
     }
   };
 
@@ -609,9 +642,9 @@ export default function App() {
               {[
                 { key: 'stats', icon: '📊', label: 'Stat' },
                 { key: 'history', icon: '📋', label: 'Tarix' },
+                { key: 'tariffs', icon: '💳', label: 'Tarif' },
                 { key: 'block', icon: '🔒', label: 'Blok' },
                 { key: 'broadcast', icon: '📢', label: 'Xabar' },
-                { key: 'about', icon: 'ℹ️', label: 'Haqida' },
               ].map(item => (
                 <button
                   key={item.key}
@@ -711,6 +744,80 @@ export default function App() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── TARIFLAR ── */}
+              {sidePanel === 'tariffs' && (
+                <div>
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-lg font-bold text-blue-600">💳 Tarif boshqaruvi</h2>
+                    <button onClick={fetchTariffDrivers} className="text-xs text-blue-500 hover:underline">🔄</button>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-3 mb-3 text-xs text-blue-700">
+                    Haydovchi to'lovni amalga oshirgandan so'ng "Faollashtir" tugmasini bosing
+                  </div>
+                  {tariffDrivers.length === 0 ? (
+                    <p className="text-center text-gray-400 py-8">Haydovchilar yo'q</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {tariffDrivers.map(driver => {
+                        const isExpired = driver.tariff_type && driver.tariff_type !== 'per_order' &&
+                          driver.tariff_expires_at && new Date(driver.tariff_expires_at) < new Date();
+                        const noTariff = !driver.tariff_type;
+                        const expiresAt = driver.tariff_expires_at ? new Date(driver.tariff_expires_at) : null;
+                        const tariffLabel = driver.tariff_type === 'per_order' ? 'Donali'
+                          : driver.tariff_type === 'half_day' ? 'Yarim kunlik'
+                          : driver.tariff_type === 'daily' ? 'Kunlik'
+                          : driver.tariff_type === 'monthly' ? 'Oylik' : '—';
+                        return (
+                          <div key={driver.id} className={`border rounded-lg p-3 ${isExpired || noTariff ? 'bg-red-50 border-red-200' : 'bg-white'}`}>
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <p className="font-bold text-sm">{driver.full_name}</p>
+                                <p className="text-xs text-gray-500">📞 {driver.phone}</p>
+                                <p className="text-xs mt-1">
+                                  {noTariff ? <span className="text-red-500 font-bold">❌ Tarif yo'q</span>
+                                    : isExpired ? <span className="text-red-500 font-bold">⏰ Tarif tugadi</span>
+                                    : <span className="text-green-600 font-bold">✅ {tariffLabel}</span>}
+                                </p>
+                                {expiresAt && !isExpired && driver.tariff_type !== 'per_order' && (
+                                  <p className="text-xs text-gray-400">
+                                    Tugaydi: {expiresAt.getDate()}.{expiresAt.getMonth()+1} {expiresAt.getHours()}:{String(expiresAt.getMinutes()).padStart(2,'0')}
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => setActivatingTariff(activatingTariff === driver.id ? null : driver.id)}
+                                className="px-2 py-1 bg-blue-500 text-white rounded text-xs font-bold hover:bg-blue-600"
+                              >
+                                💳 Faollashtir
+                              </button>
+                            </div>
+                            {activatingTariff === driver.id && (
+                              <div className="border-t pt-2 space-y-1">
+                                <p className="text-xs font-bold text-gray-600 mb-1">Tarif tanlang:</p>
+                                {[
+                                  { id: 'per_order', label: 'Donali (bepul)' },
+                                  { id: 'half_day',  label: 'Yarim kunlik — 11 000' },
+                                  { id: 'daily',     label: 'Kunlik — 22 000' },
+                                  { id: 'monthly',   label: 'Oylik — 29 900' },
+                                ].map(plan => (
+                                  <button
+                                    key={plan.id}
+                                    onClick={() => activateTariff(driver.id, plan.id)}
+                                    className="w-full text-left text-xs bg-white border rounded px-3 py-2 hover:bg-blue-50 font-medium"
+                                  >
+                                    {plan.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
