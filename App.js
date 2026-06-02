@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Alert, ScrollView, Switch, Modal, FlatList
+  StyleSheet, Alert, ScrollView, Switch, Modal, FlatList, Linking
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
@@ -15,7 +15,10 @@ import Constants from 'expo-constants';
 const API = 'https://taxipark-production.up.railway.app/api';
 const SOCKET_URL = 'https://taxipark-production.up.railway.app';
 const BASE_PRICE = 500;
+const COMPANY_SHARE = 900;
 const PAUSE_PRICE_PER_MIN = 200;
+const WAITING_FREE_MINUTES = 3;
+const WAITING_PRICE_PER_MIN = 1000;
 const DAY_RATES  = { first: 6000, second: 5000, rest: 4500 };
 const NIGHT_RATES = { first: 8000, second: 7000, rest: 6500 };
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
@@ -102,6 +105,8 @@ export default function App() {
   const [incomingOrder, setIncomingOrder] = useState(null);
   const [acceptedOrder, setAcceptedOrder] = useState(null);
   const [isRiding, setIsRiding] = useState(false);
+  const [isArrived, setIsArrived] = useState(false);
+  const [waitingSeconds, setWaitingSeconds] = useState(0);
 
   // Qo'shimcha xizmatlar
   const [showServices, setShowServices] = useState(false);
@@ -143,6 +148,8 @@ export default function App() {
   const pauseSecondsRef = useRef(0);
   const tokenRef = useRef(null);
   const extraPriceRef = useRef(0);
+  const waitingTimerRef = useRef(null);
+  const waitingSecondsRef = useRef(0);
 
   useEffect(() => { checkToken(); }, []);
   useEffect(() => { driverRef.current = driver; }, [driver]);
@@ -378,6 +385,16 @@ export default function App() {
     setIncomingOrder(null);
   };
 
+  const handleArrived = () => {
+    setIsArrived(true);
+    setWaitingSeconds(0);
+    waitingSecondsRef.current = 0;
+    waitingTimerRef.current = setInterval(() => {
+      waitingSecondsRef.current += 1;
+      setWaitingSeconds(s => s + 1);
+    }, 1000);
+  };
+
   // Xizmat tanlash/bekor qilish
   const toggleService = (serviceId) => {
     setSelectedServices(prev =>
@@ -402,6 +419,7 @@ export default function App() {
   const confirmStartRide = async () => {
     try {
       setShowServices(false);
+      clearInterval(waitingTimerRef.current);
 
       await axios.post(`${API}/order/start`,
         { order_id: acceptedOrder.id },
@@ -492,9 +510,11 @@ export default function App() {
     try {
       clearInterval(timerRef.current);
       clearInterval(pauseTimerRef.current);
+      clearInterval(waitingTimerRef.current);
       if (locationRef.current) { locationRef.current.remove(); locationRef.current = null; }
 
       const pauseMinutes = pauseSecondsRef.current / 60;
+      const waitingMinutes = waitingSecondsRef.current / 60;
       const extraTotal = extraPriceRef.current;
 
       const res = await axios.post(`${API}/order/finish`,
@@ -502,40 +522,46 @@ export default function App() {
           order_id: acceptedOrder.id,
           distance_km: distanceRef.current,
           pause_minutes: pauseMinutes,
+          waiting_minutes: waitingMinutes,
           extra_price: extraTotal,
           extra_services: selectedServices
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const { total_price, pause_price, is_night } = res.data;
-      const kmPrice = total_price - BASE_PRICE - (pause_price || 0) - extraTotal;
+      const { total_price, pause_price, waiting_fee, is_night } = res.data;
+      const kmPrice = total_price - BASE_PRICE - (pause_price || 0) - (waiting_fee || 0) - extraTotal;
 
       let alertMsg = `${is_night ? '🌙 Tun narxi' : '☀️ Kunduz narxi'}\n`;
       alertMsg += `📏 Masofa: ${distanceRef.current.toFixed(2)} km\n`;
       alertMsg += `💰 Km narxi: ${kmPrice.toLocaleString()} so'm\n`;
+      if (waiting_fee > 0) {
+        const billableMins = Math.ceil((waitingSecondsRef.current - WAITING_FREE_MINUTES * 60) / 60);
+        alertMsg += `⏳ Kutish: ${billableMins} min = ${waiting_fee.toLocaleString()} so'm\n`;
+      }
+      if (pause_price > 0) {
+        alertMsg += `⏸ Pauza: ${Math.floor(pauseSecondsRef.current / 60)} min = ${pause_price.toLocaleString()} so'm\n`;
+      }
       if (extraTotal > 0) {
         const selected = EXTRA_SERVICES.filter(s => selectedServices.includes(s.id));
         selected.forEach(s => {
           alertMsg += `${s.emoji} ${s.label}: +${s.price.toLocaleString()} so'm\n`;
         });
       }
-      if (pause_price > 0) {
-        alertMsg += `⏸ Kutish: ${Math.floor(pauseSecondsRef.current / 60)} min = ${pause_price.toLocaleString()} so'm\n`;
-      }
-      alertMsg += `🏢 Kompaniya: 500 so'm\n`;
+      alertMsg += `🏢 Kompaniya: ${COMPANY_SHARE.toLocaleString()} so'm\n`;
       alertMsg += `━━━━━━━━━━━━━━\n`;
       alertMsg += `💵 JAMI: ${total_price.toLocaleString()} so'm\n`;
-      alertMsg += `👤 Sizniki: ${(total_price - BASE_PRICE).toLocaleString()} so'm`;
+      alertMsg += `👤 Sizniki: ${(total_price - COMPANY_SHARE).toLocaleString()} so'm`;
 
       Alert.alert('Reys tugadi! ✅', alertMsg);
 
-      setIsRiding(false); setAcceptedOrder(null);
+      setIsRiding(false); setIsArrived(false); setAcceptedOrder(null);
       setPrice(BASE_PRICE); setSeconds(0); setDistanceKm(0);
       setIsPaused(false); setPauseSeconds(0); setPausePrice(0);
-      setSelectedServices([]);
+      setWaitingSeconds(0); setSelectedServices([]);
       lastPosRef.current = null; distanceRef.current = 0;
       pauseSecondsRef.current = 0; extraPriceRef.current = 0;
+      waitingSecondsRef.current = 0;
     } catch (err) {
       Alert.alert('Xato!', 'Reysni tugatishda xato');
     }
@@ -770,22 +796,64 @@ export default function App() {
               </View>
             )}
 
-            {/* Qabul qilingan zakaz */}
-            {acceptedOrder && !isRiding && (
+            {/* Qabul qilingan zakaz — klent oldiga ketish */}
+            {acceptedOrder && !isArrived && !isRiding && (
               <View style={[styles.card, {borderLeftWidth: 4, borderLeftColor: '#8b5cf6', backgroundColor: '#f5f3ff'}]}>
                 <Text style={[styles.orderTitle, {color: '#7c3aed'}]}>✋ Zakaz qabul qilindi</Text>
-                <Text style={styles.orderInfo}>📞 {acceptedOrder.customer_phone}</Text>
+                <TouchableOpacity onPress={() => Linking.openURL(`tel:${acceptedOrder.customer_phone}`)}>
+                  <Text style={[styles.orderInfo, {color: '#2563eb', textDecorationLine: 'underline'}]}>
+                    📞 {acceptedOrder.customer_phone} (bosing — qo'ng'iroq)
+                  </Text>
+                </TouchableOpacity>
                 <Text style={styles.orderInfo}>📍 {acceptedOrder.from_address}</Text>
                 <View style={[styles.card, {backgroundColor: '#ede9fe', margin: 0, marginTop: 10}]}>
                   <Text style={{color: '#6d28d9', fontWeight: 'bold', fontSize: 13}}>
-                    ℹ️ Yo'lovchiga qo'ng'iroq qiling, moshinaga o'tirgandan keyin "BOSHLASH" ni bosing
+                    ℹ️ Klent oldiga borgach "KELDIM" tugmasini bosing
                   </Text>
                 </View>
-                <TouchableOpacity style={[styles.startBtn, {marginTop: 12}]} onPress={startRide}>
-                  <Text style={styles.btnText}>▶️ BOSHLASH</Text>
+                <TouchableOpacity style={[styles.startBtn, {marginTop: 12, backgroundColor: '#7c3aed'}]} onPress={handleArrived}>
+                  <Text style={styles.btnText}>📍 KELDIM</Text>
                 </TouchableOpacity>
               </View>
             )}
+
+            {/* Klent kutilmoqda — kutish vaqti */}
+            {acceptedOrder && isArrived && !isRiding && (() => {
+              const freeSecs = WAITING_FREE_MINUTES * 60;
+              const freeLeft = Math.max(0, freeSecs - waitingSeconds);
+              const billableSecs = Math.max(0, waitingSeconds - freeSecs);
+              const waitingFee = Math.round((billableSecs / 60) * WAITING_PRICE_PER_MIN);
+              return (
+                <View style={[styles.card, {borderLeftWidth: 4, borderLeftColor: billableSecs > 0 ? '#dc2626' : '#16a34a', backgroundColor: billableSecs > 0 ? '#fef2f2' : '#f0fdf4'}]}>
+                  <Text style={[styles.orderTitle, {color: billableSecs > 0 ? '#dc2626' : '#16a34a'}]}>
+                    ⏳ Klent kutilmoqda
+                  </Text>
+                  <TouchableOpacity onPress={() => Linking.openURL(`tel:${acceptedOrder.customer_phone}`)}>
+                    <Text style={[styles.orderInfo, {color: '#2563eb', textDecorationLine: 'underline'}]}>
+                      📞 {acceptedOrder.customer_phone} (bosing — qo'ng'iroq)
+                    </Text>
+                  </TouchableOpacity>
+                  <Text style={styles.orderInfo}>📍 {acceptedOrder.from_address}</Text>
+
+                  {freeLeft > 0 ? (
+                    <View style={[styles.card, {backgroundColor: '#dcfce7', margin: 0, marginTop: 10, alignItems: 'center'}]}>
+                      <Text style={{color: '#16a34a', fontSize: 13}}>Tekin kutish vaqti:</Text>
+                      <Text style={{color: '#16a34a', fontSize: 28, fontWeight: 'bold'}}>{formatTime(freeLeft)}</Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.card, {backgroundColor: '#fee2e2', margin: 0, marginTop: 10, alignItems: 'center'}]}>
+                      <Text style={{color: '#dc2626', fontSize: 13}}>Kutish haqi:</Text>
+                      <Text style={{color: '#dc2626', fontSize: 28, fontWeight: 'bold'}}>{waitingFee.toLocaleString()} so'm</Text>
+                      <Text style={{color: '#dc2626', fontSize: 12}}>{Math.ceil(billableSecs / 60)} min × 1,000 so'm</Text>
+                    </View>
+                  )}
+
+                  <TouchableOpacity style={[styles.startBtn, {marginTop: 12, backgroundColor: '#16a34a'}]} onPress={startRide}>
+                    <Text style={styles.btnText}>▶️ YO'LGA TUSHISH</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
 
             {/* Reys davom etmoqda */}
             {isRiding && acceptedOrder && (
@@ -793,7 +861,11 @@ export default function App() {
                 <Text style={[styles.orderTitle, {color: isPaused ? '#d97706' : '#16a34a'}]}>
                   {isPaused ? '⏸ Pauza — Kutilmoqda' : '▶️ Reys davom etmoqda'}
                 </Text>
-                <Text style={styles.orderInfo}>📞 {acceptedOrder.customer_phone}</Text>
+                <TouchableOpacity onPress={() => Linking.openURL(`tel:${acceptedOrder.customer_phone}`)}>
+                  <Text style={[styles.orderInfo, {color: '#2563eb', textDecorationLine: 'underline'}]}>
+                    📞 {acceptedOrder.customer_phone}
+                  </Text>
+                </TouchableOpacity>
                 <Text style={styles.orderInfo}>📍 {acceptedOrder.from_address}</Text>
                 <Text style={styles.orderInfo}>{isNightRide ? '🌙 Tun narxi' : '☀️ Kunduz narxi'}</Text>
 
