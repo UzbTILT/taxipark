@@ -24,8 +24,16 @@ const createCarIcon = (isOnline, driverName) => L.divIcon({
   popupAnchor: [0, -58],
 });
 
-const API = 'https://taxipark-production.up.railway.app/api';
-const SOCKET_URL = 'https://taxipark-production.up.railway.app';
+const API = process.env.REACT_APP_API_URL || 'https://taxipark-production.up.railway.app/api';
+const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'https://taxipark-production.up.railway.app';
+const DISPATCHER_HEADERS = {
+  'Content-Type': 'application/json',
+  'x-dispatcher-key': process.env.REACT_APP_DISPATCHER_KEY || '',
+};
+const ADMIN_HEADERS = {
+  'Content-Type': 'application/json',
+  'x-admin-key': process.env.REACT_APP_ADMIN_KEY || '',
+};
 const VILLAGE_CENTER = [41.292305, 71.665635];
 const TIMEOUT_SECONDS = 60;
 
@@ -137,7 +145,7 @@ export default function App() {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch(`${API}/order/all`);
+      const res = await fetch(`${API}/order/all?active=true`, { headers: DISPATCHER_HEADERS });
       const data = await res.json();
       setOrders(data.orders);
     } catch (err) {}
@@ -145,7 +153,7 @@ export default function App() {
 
   const fetchDrivers = async () => {
     try {
-      const res = await fetch(`${API}/admin/drivers`);
+      const res = await fetch(`${API}/admin/drivers`, { headers: ADMIN_HEADERS });
       const data = await res.json();
       setDrivers(data.drivers);
     } catch (err) {}
@@ -153,7 +161,7 @@ export default function App() {
 
   const fetchStats = async (period) => {
     try {
-      const res = await fetch(`${API}/order/all`);
+      const res = await fetch(`${API}/order/all?status=finished&limit=500`, { headers: DISPATCHER_HEADERS });
       const data = await res.json();
       const allOrders = data.orders || [];
 
@@ -187,9 +195,9 @@ export default function App() {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch(`${API}/order/all`);
+      const res = await fetch(`${API}/order/all?status=finished&limit=100`, { headers: DISPATCHER_HEADERS });
       const data = await res.json();
-      const finished = (data.orders || []).filter(o => o.status === 'finished');
+      const finished = (data.orders || []);
       setHistory(finished);
     } catch (err) {}
   };
@@ -198,7 +206,7 @@ export default function App() {
     try {
       await fetch(`${API}/admin/driver/${driver.id}/block`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: ADMIN_HEADERS,
         body: JSON.stringify({ is_blocked: !driver.is_blocked })
       });
       fetchDrivers();
@@ -210,7 +218,7 @@ export default function App() {
     try {
       await fetch(`${API}/driver/broadcast`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: DISPATCHER_HEADERS,
         body: JSON.stringify({ message: broadcastMsg })
       });
       setBroadcastSent(true);
@@ -238,7 +246,7 @@ export default function App() {
     try {
       const res = await fetch(`${API}/order/create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: DISPATCHER_HEADERS,
         body: JSON.stringify(form),
       });
       const data = await res.json();
@@ -287,12 +295,12 @@ export default function App() {
     try {
       await fetch(`${API}/order/assign`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: DISPATCHER_HEADERS,
         body: JSON.stringify({ order_id: orderId, driver_id: driverId })
       });
       await fetch(`${API}/order/send-to-driver`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: DISPATCHER_HEADERS,
         body: JSON.stringify({ order_id: orderId, driver_id: driverId })
       });
 
@@ -320,7 +328,7 @@ export default function App() {
       if (statusCheckerRef.current) clearInterval(statusCheckerRef.current);
       statusCheckerRef.current = setInterval(async () => {
         try {
-          const res = await fetch(`${API}/order/all`);
+          const res = await fetch(`${API}/order/all?active=true`, { headers: DISPATCHER_HEADERS });
           const data = await res.json();
           const order = data.orders.find(o => o.id === orderId);
           if (order && order.status !== 'assigned') {
