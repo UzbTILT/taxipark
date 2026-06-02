@@ -56,8 +56,10 @@ const orderRoutes = require('./routes/orderRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const dispatcherAuthRoutes = require('./routes/dispatcherAuthRoutes');
 
 app.use('/api/auth', loginLimit, authRoutes);
+app.use('/api/dispatcher', loginLimit, dispatcherAuthRoutes);
 app.use('/api/driver', driverRoutes);
 app.use('/api/order', orderRoutes);
 app.use('/api/payment', paymentRoutes);

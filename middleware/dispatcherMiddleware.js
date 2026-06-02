@@ -1,9 +1,20 @@
+const jwt = require('jsonwebtoken');
+
 const dispatcherMiddleware = (req, res, next) => {
-  const key = req.headers['x-dispatcher-key'];
-  if (!key || key !== process.env.DISPATCHER_API_KEY) {
-    return res.status(401).json({ message: 'Ruxsat yo\'q! Dispetcher kaliti noto\'g\'ri.' });
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ message: 'Token yo\'q! Iltimos login qiling.' });
   }
-  next();
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role !== 'dispatcher') {
+      return res.status(403).json({ message: 'Ruxsat yo\'q!' });
+    }
+    req.dispatcher = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: 'Token noto\'g\'ri yoki muddati tugagan!' });
+  }
 };
 
 module.exports = dispatcherMiddleware;
