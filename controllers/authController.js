@@ -2,10 +2,26 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 
+// Telefon raqam formati tekshirish: +998XXXXXXXXX
+const isValidPhone = (phone) => /^\+998\d{9}$/.test(phone);
+
 // Haydovchi ro'yxatdan o'tish
 const register = async (req, res) => {
   try {
     const { full_name, phone, password, car_model, car_number } = req.body;
+
+    if (!full_name?.trim()) {
+      return res.status(400).json({ message: 'Ism kiritilishi shart!' });
+    }
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({ message: 'Telefon raqam noto\'g\'ri! Namuna: +998901234567' });
+    }
+    if (!password || password.length < 6) {
+      return res.status(400).json({ message: 'Parol kamida 6 ta belgidan iborat bo\'lishi kerak!' });
+    }
+    if (!car_model?.trim() || !car_number?.trim()) {
+      return res.status(400).json({ message: 'Mashina modeli va raqami kiritilishi shart!' });
+    }
 
     // Telefon raqam mavjudmi tekshirish
     const exists = await pool.query(
@@ -38,6 +54,13 @@ const register = async (req, res) => {
 const login = async (req, res) => {
   try {
     const { phone, password } = req.body;
+
+    if (!isValidPhone(phone)) {
+      return res.status(400).json({ message: 'Telefon raqam noto\'g\'ri! Namuna: +998901234567' });
+    }
+    if (!password) {
+      return res.status(400).json({ message: 'Parol kiritilishi shart!' });
+    }
 
     // Haydovchini topish
     const result = await pool.query(

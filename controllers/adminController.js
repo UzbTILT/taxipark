@@ -1,13 +1,31 @@
 const pool = require('../config/db');
 
-// Tizim holati (xotirada saqlanadi)
-let systemOnline = true;
+// Settings jadvalini yaratish va boshlang'ich qiymat qo'yish
+const initSettings = async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key VARCHAR(50) PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+  await pool.query(`
+    INSERT INTO settings (key, value) VALUES ('system_online', 'true')
+    ON CONFLICT (key) DO NOTHING
+  `);
+};
+initSettings().catch(err => console.error('Settings init xatosi:', err));
+
+// Tizim holatini DB dan o'qish
+const getSystemOnline = async () => {
+  const result = await pool.query("SELECT value FROM settings WHERE key = 'system_online'");
+  return result.rows[0]?.value === 'true';
+};
 
 // Barcha haydovchilar
 const getAllDrivers = async (req, res) => {
   try {
-    // Tizim o'chiq bo'lsa — 503
-    if (!systemOnline) {
+    const isOnline = await getSystemOnline();
+    if (!isOnline) {
       return res.status(503).json({ message: 'Tizim vaqtincha o\'chiq!' });
     }
     const result = await pool.query(
@@ -38,41 +56,45 @@ const blockDriver = async (req, res) => {
 
 // Tizim holatini olish
 const getSystemStatus = async (req, res) => {
-  res.json({ is_online: systemOnline });
+  try {
+    const isOnline = await getSystemOnline();
+    res.json({ is_online: isOnline });
+  } catch (error) {
+    res.status(500).json({ message: 'Server xatosi!', error: error.message });
+  }
 };
 
 // Tizimni yoqish/o'chirish
 const toggleSystem = async (req, res) => {
   try {
     const { is_online } = req.body;
-    systemOnline = is_online;
+
+    // DB ga saqlash — server restart bo'lsa ham holat saqlanadi
+    await pool.query(
+      "UPDATE settings SET value = $1 WHERE key = 'system_online'",
+      [is_online ? 'true' : 'false']
+    );
 
     if (!is_online) {
-      // Barcha haydovchilarni offline qilish
       await pool.query('UPDATE drivers SET is_online = false');
-
-      // Socket orqali barcha haydovchilarga signal
       if (global.io) {
         global.io.emit('system_offline', {
           message: 'Tizim vaqtincha o\'chirildi. Keyinroq urinib ko\'ring.'
         });
       }
     } else {
-      // Tizim yoqildi
       if (global.io) {
-        global.io.emit('system_online', {
-          message: 'Tizim yana ishlayapti!'
-        });
+        global.io.emit('system_online', { message: 'Tizim yana ishlayapti!' });
       }
     }
 
     res.json({
       message: is_online ? 'Tizim yoqildi!' : 'Tizim o\'chirildi!',
-      is_online: systemOnline
+      is_online
     });
   } catch (error) {
     res.status(500).json({ message: 'Server xatosi!', error: error.message });
   }
 };
 
-module.exports = { getAllDrivers, blockDriver, getSystemStatus, toggleSystem, systemOnline: () => systemOnline };
+module.exports = { getAllDrivers, blockDriver, getSystemStatus, toggleSystem };

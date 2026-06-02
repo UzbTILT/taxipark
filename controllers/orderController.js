@@ -19,6 +19,7 @@ const createOrder = async (req, res) => {
       [customer_phone, from_address, base_price, base_price]
     );
 
+    if (global.io) global.io.emit('orders_updated');
     res.status(201).json({
       message: 'Buyurtma yaratildi!',
       order: result.rows[0]
@@ -38,6 +39,7 @@ const assignOrder = async (req, res) => {
       ['assigned', driver_id, order_id]
     );
 
+    if (global.io) global.io.emit('orders_updated');
     res.json({ message: 'Buyurtma haydovchiga yuborildi!' });
   } catch (error) {
     res.status(500).json({ message: 'Server xatosi!', error: error.message });
@@ -108,6 +110,7 @@ const finishOrder = async (req, res) => {
       ['finished', total_price, JSON.stringify(extra_services || []), order_id]
     );
 
+    if (global.io) global.io.emit('orders_updated');
     res.json({
       message: 'Reys tugadi!',
       total_price,
@@ -141,6 +144,7 @@ const acceptOrder = async (req, res) => {
       return res.status(409).json({ message: 'Bu buyurtma allaqachon qabul qilingan yoki sizga tegishli emas!' });
     }
 
+    if (global.io) global.io.emit('orders_updated');
     res.json({ message: 'Zakaz qabul qilindi!' });
   } catch (error) {
     res.status(500).json({ message: 'Server xatosi!', error: error.message });
@@ -171,6 +175,7 @@ const rejectOrder = async (req, res) => {
         order_id: order_id,
         driver_name: order?.driver_name || 'Haydovchi'
       });
+      global.io.emit('orders_updated');
     }
 
     res.json({ message: 'Zakaz rad etildi!' });
