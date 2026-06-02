@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { BASE_PRICE, PAUSE_PRICE_PER_MIN, calcKmPrice } = require('../constants');
 
 // Yangi buyurtma yaratish (dispetcher)
 const createOrder = async (req, res) => {
@@ -9,7 +10,7 @@ const createOrder = async (req, res) => {
       return res.status(400).json({ message: 'Telefon va manzil kiritilishi shart!' });
     }
 
-    const base_price = 500;
+    const base_price = BASE_PRICE;
 
     const result = await pool.query(
       `INSERT INTO orders 
@@ -78,30 +79,11 @@ const finishOrder = async (req, res) => {
     // Kechasi: 18:01 dan 05:59 gacha (ya'ni soat 18 va undan katta yoki soat 6 dan kichik bo'lsa)
     const isNight = tashkentHour >= 18 || tashkentHour < 6;
 
-    const BASE_PRICE = 500;
     const km = parseFloat(distance_km) || 0;
     const pauseMin = parseFloat(pause_minutes) || 0;
 
-    // Km narx hisoblash (regressive tarif)
-    let totalKmPrice = 0;
-
-    if (isNight) {
-      // Tun: 1km=6000, 2km=5000, 3km=4000, 4km=3000, 5km+=2000
-      if (km <= 1)      totalKmPrice = km * 6000;
-      else if (km <= 2) totalKmPrice = 6000 + (km - 1) * 5000;
-      else if (km <= 3) totalKmPrice = 6000 + 5000 + (km - 2) * 4000;
-      else if (km <= 4) totalKmPrice = 6000 + 5000 + 4000 + (km - 3) * 3000;
-      else              totalKmPrice = 6000 + 5000 + 4000 + 3000 + (km - 4) * 2000;
-    } else {
-      // Kunduz: 1km=4000, 2km=3000, 3km+=2000
-      if (km <= 1)      totalKmPrice = km * 4000;
-      else if (km <= 2) totalKmPrice = 4000 + (km - 1) * 3000;
-      else              totalKmPrice = 4000 + 3000 + (km - 2) * 2000;
-    }
-
-    // Pauza narxi: har 1 daqiqa = 200 so'm
-    const pausePrice = Math.round(pauseMin * 200);
-
+    const totalKmPrice = calcKmPrice(km, isNight);
+    const pausePrice = Math.round(pauseMin * PAUSE_PRICE_PER_MIN);
     const extraAmount = parseFloat(extra_price) || 0;
     const total_price = Math.round(BASE_PRICE + totalKmPrice + pausePrice + extraAmount);
 
