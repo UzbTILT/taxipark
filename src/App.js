@@ -226,7 +226,7 @@ export default function App() {
   const sendBroadcast = async () => {
     if (!broadcastMsg.trim()) return;
     try {
-      await fetch(`${API}/driver/broadcast`, {
+      await fetch(`${API}/message/broadcast`, {
         method: 'POST',
         headers: DISPATCHER_HEADERS,
         body: JSON.stringify({ message: broadcastMsg })
