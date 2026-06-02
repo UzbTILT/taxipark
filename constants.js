@@ -1,4 +1,5 @@
 const BASE_PRICE = 500;
+const COMPANY_SHARE = 900;
 const PAUSE_PRICE_PER_MIN = 200;
 
 const DAY_RATES  = { first: 6000, second: 5000, rest: 4500 };
@@ -11,4 +12,4 @@ const calcKmPrice = (km, isNight) => {
   return r.first + r.second + (km - 2) * r.rest;
 };
 
-module.exports = { BASE_PRICE, PAUSE_PRICE_PER_MIN, DAY_RATES, NIGHT_RATES, calcKmPrice };
+module.exports = { BASE_PRICE, COMPANY_SHARE, PAUSE_PRICE_PER_MIN, DAY_RATES, NIGHT_RATES, calcKmPrice };
