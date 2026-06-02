@@ -1,5 +1,9 @@
 const pool = require('../config/db');
-const { BASE_PRICE, PAUSE_PRICE_PER_MIN, WAITING_FREE_MINUTES, WAITING_PRICE_PER_MIN, calcKmPrice } = require('../constants');
+const { BASE_PRICE, COMPANY_SHARE, PAUSE_PRICE_PER_MIN, WAITING_FREE_MINUTES, WAITING_PRICE_PER_MIN, calcKmPrice } = require('../constants');
+
+// company_share kolonini qo'shish (mavjud bo'lmasa)
+pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS company_share INTEGER DEFAULT 0')
+  .catch(err => console.error('company_share column xatosi:', err));
 
 // Yangi buyurtma yaratish (dispetcher)
 const createOrder = async (req, res) => {
@@ -69,14 +73,9 @@ const finishOrder = async (req, res) => {
   try {
     const { order_id, distance_km, pause_minutes, waiting_minutes = 0, extra_price, extra_services } = req.body;
 
-    // 1. VAQTNI TOSHKENТ SOATIGA O'GIRISH (0-23 raqam qaytaradi)
     const tashkentHour = parseInt(
       new Date().toLocaleString("en-US", { timeZone: "Asia/Tashkent", hour: "2-digit", hour12: false })
     );
-
-    // 2. SIZ AYTGAN VAQT CHEGARA SHARTI:
-    // Kunduzi: 06:00 dan 18:00 gacha (ya'ni soat 6 dan 17 gacha bo'lgan vaqt)
-    // Kechasi: 18:01 dan 05:59 gacha (ya'ni soat 18 va undan katta yoki soat 6 dan kichik bo'lsa)
     const isNight = tashkentHour >= 18 || tashkentHour < 6;
 
     const km = parseFloat(distance_km) || 0;
@@ -89,15 +88,19 @@ const finishOrder = async (req, res) => {
     const extraAmount = parseFloat(extra_price) || 0;
     const total_price = Math.round(BASE_PRICE + totalKmPrice + pausePrice + waitingFee + extraAmount);
 
+    // Faqat donali tarifda kompaniya ulushi olinadi
+    const company_share = req.driver.tariff_type === 'per_order' ? COMPANY_SHARE : 0;
+
     await pool.query(
-      'UPDATE orders SET status = $1, finished_at = NOW(), total_price = $2, extra_services = $3 WHERE id = $4',
-      ['finished', total_price, JSON.stringify(extra_services || []), order_id]
+      'UPDATE orders SET status = $1, finished_at = NOW(), total_price = $2, extra_services = $3, company_share = $4 WHERE id = $5',
+      ['finished', total_price, JSON.stringify(extra_services || []), company_share, order_id]
     );
 
     if (global.io) global.io.emit('orders_updated');
     res.json({
       message: 'Reys tugadi!',
       total_price,
+      company_share,
       distance_km: km,
       pause_minutes: pauseMin,
       pause_price: pausePrice,
