@@ -8,8 +8,8 @@ require('dotenv').config();
 const pool = require('./config/db');
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : [];
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : ['http://localhost:3000', 'http://localhost:3001'];
 
 const corsOptions = {
   origin: (origin, callback) => {
