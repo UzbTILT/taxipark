@@ -306,7 +306,7 @@ export default function App() {
 
       const totalOrders = filtered.length;
       const totalEarned = filtered.reduce((sum, o) => sum + (parseFloat(o.total_price) || 0), 0);
-      const companyAmount = totalOrders * 900;
+      const companyAmount = filtered.reduce((sum, o) => sum + (parseFloat(o.company_share) || 0), 0);
       const driversAmount = totalEarned - companyAmount;
       const avgPrice = totalOrders > 0 ? Math.round(totalEarned / totalOrders) : 0;
 
