@@ -19,7 +19,9 @@ export default function App() {
       const res = await fetch(`${API}/admin/system-status`, { headers: ADMIN_HEADERS });
       const data = await res.json();
       setSystemOnline(data.is_online);
-    } catch (err) {}
+    } catch (err) {
+      console.error('Tizim holatini yuklashda xato:', err);
+    }
   };
 
   const toggleSystem = async () => {
