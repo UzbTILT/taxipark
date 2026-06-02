@@ -15,6 +15,9 @@ import Constants from 'expo-constants';
 const API = 'https://taxipark-production.up.railway.app/api';
 const SOCKET_URL = 'https://taxipark-production.up.railway.app';
 const BASE_PRICE = 500;
+const PAUSE_PRICE_PER_MIN = 200;
+const DAY_RATES  = { first: 6000, second: 5000, rest: 4500 };
+const NIGHT_RATES = { first: 8000, second: 7000, rest: 6500 };
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 
 // Background GPS task
@@ -67,19 +70,11 @@ const getDistanceKm = (lat1, lon1, lat2, lon2) => {
 
 // Narx hisoblash
 const calcPrice = (km, isNight) => {
+  const r = isNight ? NIGHT_RATES : DAY_RATES;
   let totalKmPrice = 0;
-  if (isNight) {
-    if (km <= 1)      totalKmPrice = km * 6000;
-    else if (km <= 2) totalKmPrice = 6000 + (km - 1) * 5000;
-    else if (km <= 3) totalKmPrice = 6000 + 5000 + (km - 2) * 4000;
-    else if (km <= 4) totalKmPrice = 6000 + 5000 + 4000 + (km - 3) * 3000;
-    else if (km <= 5) totalKmPrice = 6000 + 5000 + 4000 + 3000 + (km - 4) * 2000;
-    else              totalKmPrice = 6000 + 5000 + 4000 + 3000 + 2000 + (km - 5) * 2000;
-  } else {
-    if (km <= 1)      totalKmPrice = km * 4000;
-    else if (km <= 2) totalKmPrice = 4000 + (km - 1) * 3000;
-    else              totalKmPrice = 4000 + 3000 + (km - 2) * 2000;
-  }
+  if (km <= 1)      totalKmPrice = km * r.first;
+  else if (km <= 2) totalKmPrice = r.first + (km - 1) * r.second;
+  else              totalKmPrice = r.first + r.second + (km - 2) * r.rest;
   return Math.round(BASE_PRICE + totalKmPrice);
 };
 
@@ -193,7 +188,7 @@ export default function App() {
         setToken(null); setDriver(null); setIsOnline(false);
         setIncomingOrder(null); setAcceptedOrder(null); setIsRiding(false);
         setScreen('login');
-        Alert.alert('⛔ Tizim o'chirildi', data.message || 'Tizim vaqtincha o'chirildi.');
+       Alert.alert("⛔ Tizim o'chirildi", data.message || "Tizim vaqtincha o'chirildi.");
       });
     }
     return () => { if (socketRef.current) socketRef.current.disconnect(); };
@@ -439,7 +434,7 @@ export default function App() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         locationRef.current = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.High, distanceInterval: 5, timeInterval: 2000 },
+          { accuracy: Location.Accuracy.High, distanceInterval: 20, timeInterval: 5000 },
           (loc) => {
             const { latitude, longitude } = loc.coords;
             if (!isPaused) {
