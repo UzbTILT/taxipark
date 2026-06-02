@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { BASE_PRICE, PAUSE_PRICE_PER_MIN, calcKmPrice } = require('../constants');
+const { BASE_PRICE, PAUSE_PRICE_PER_MIN, WAITING_FREE_MINUTES, WAITING_PRICE_PER_MIN, calcKmPrice } = require('../constants');
 
 // Yangi buyurtma yaratish (dispetcher)
 const createOrder = async (req, res) => {
@@ -67,7 +67,7 @@ const startOrder = async (req, res) => {
 // Buyurtmani tugatish — narx backendda hisoblanadi
 const finishOrder = async (req, res) => {
   try {
-    const { order_id, distance_km, pause_minutes, extra_price, extra_services } = req.body;
+    const { order_id, distance_km, pause_minutes, waiting_minutes = 0, extra_price, extra_services } = req.body;
 
     // 1. VAQTNI TOSHKENТ SOATIGA O'GIRISH (0-23 raqam qaytaradi)
     const tashkentHour = parseInt(
@@ -84,8 +84,10 @@ const finishOrder = async (req, res) => {
 
     const totalKmPrice = calcKmPrice(km, isNight);
     const pausePrice = Math.round(pauseMin * PAUSE_PRICE_PER_MIN);
+    const billableWaiting = Math.max(0, parseFloat(waiting_minutes) - WAITING_FREE_MINUTES);
+    const waitingFee = Math.round(billableWaiting * WAITING_PRICE_PER_MIN);
     const extraAmount = parseFloat(extra_price) || 0;
-    const total_price = Math.round(BASE_PRICE + totalKmPrice + pausePrice + extraAmount);
+    const total_price = Math.round(BASE_PRICE + totalKmPrice + pausePrice + waitingFee + extraAmount);
 
     await pool.query(
       'UPDATE orders SET status = $1, finished_at = NOW(), total_price = $2, extra_services = $3 WHERE id = $4',
@@ -99,6 +101,7 @@ const finishOrder = async (req, res) => {
       distance_km: km,
       pause_minutes: pauseMin,
       pause_price: pausePrice,
+      waiting_fee: waitingFee,
       extra_price: extraAmount,
       is_night: isNight,
       tashkent_hour: tashkentHour
