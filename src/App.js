@@ -26,16 +26,12 @@ const createCarIcon = (isOnline, driverName) => L.divIcon({
 
 const API = process.env.REACT_APP_API_URL || 'https://taxipark-production.up.railway.app/api';
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'https://taxipark-production.up.railway.app';
-const DISPATCHER_HEADERS = {
-  'Content-Type': 'application/json',
-  'x-dispatcher-key': process.env.REACT_APP_DISPATCHER_KEY || '',
-};
 const ADMIN_HEADERS = {
   'Content-Type': 'application/json',
   'x-admin-key': process.env.REACT_APP_ADMIN_KEY || '',
 };
 const VILLAGE_CENTER = [41.292305, 71.665635];
-const TIMEOUT_SECONDS = 60;
+const TIMEOUT_SECONDS = 25;
 
 const ADDRESSES = [
   { name: "Gulbog' qabristoni", lat: 41.29230018342693, lng: 71.66558437017086 },
@@ -67,6 +63,59 @@ const ADDRESSES = [
 ];
 
 export default function App() {
+  const [dispToken, setDispToken] = useState(() => localStorage.getItem('disp_token'));
+  const [dispUser, setDispUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('disp_user')); } catch { return null; }
+  });
+  const [authScreen, setAuthScreen] = useState('login');
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [regForm, setRegForm] = useState({ username: '', password: '', full_name: '' });
+
+  const getDispHeaders = () => ({
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${dispToken || ''}`,
+  });
+
+  const handleLogin = async () => {
+    if (!loginForm.username || !loginForm.password) { alert('Username va parolni kiriting!'); return; }
+    try {
+      const res = await fetch(`${API}/dispatcher/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      localStorage.setItem('disp_token', data.token);
+      localStorage.setItem('disp_user', JSON.stringify(data.dispatcher));
+      setDispToken(data.token);
+      setDispUser(data.dispatcher);
+    } catch (err) { alert(err.message || 'Login xatosi!'); }
+  };
+
+  const handleRegister = async () => {
+    if (!regForm.username || !regForm.password || !regForm.full_name) { alert('Barcha maydonlarni to\'ldiring!'); return; }
+    try {
+      const res = await fetch(`${API}/dispatcher/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(regForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      alert('Muvaffaqiyatli ro\'yxatdan o\'tildi! Kiring.');
+      setAuthScreen('login');
+      setRegForm({ username: '', password: '', full_name: '' });
+    } catch (err) { alert(err.message || 'Ro\'yxatdan o\'tishda xato!'); }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('disp_token');
+    localStorage.removeItem('disp_user');
+    setDispToken(null);
+    setDispUser(null);
+  };
+
   const [orders, setOrders] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [nearestDrivers, setNearestDrivers] = useState([]);
@@ -147,7 +196,7 @@ export default function App() {
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch(`${API}/order/all?active=true`, { headers: DISPATCHER_HEADERS });
+      const res = await fetch(`${API}/order/all?active=true`, { headers: getDispHeaders() });
       const data = await res.json();
       setOrders(data.orders);
     } catch (err) {
@@ -167,7 +216,7 @@ export default function App() {
 
   const fetchStats = async (period) => {
     try {
-      const res = await fetch(`${API}/order/all?status=finished&limit=500`, { headers: DISPATCHER_HEADERS });
+      const res = await fetch(`${API}/order/all?status=finished&limit=500`, { headers: getDispHeaders() });
       const data = await res.json();
       const allOrders = data.orders || [];
 
@@ -203,7 +252,7 @@ export default function App() {
 
   const fetchHistory = async () => {
     try {
-      const res = await fetch(`${API}/order/all?status=finished&limit=100`, { headers: DISPATCHER_HEADERS });
+      const res = await fetch(`${API}/order/all?status=finished&limit=100`, { headers: getDispHeaders() });
       const data = await res.json();
       const finished = (data.orders || []);
       setHistory(finished);
@@ -230,7 +279,7 @@ export default function App() {
     try {
       await fetch(`${API}/message/broadcast`, {
         method: 'POST',
-        headers: DISPATCHER_HEADERS,
+        headers: getDispHeaders(),
         body: JSON.stringify({ message: broadcastMsg })
       });
       setBroadcastSent(true);
@@ -260,7 +309,7 @@ export default function App() {
     try {
       const res = await fetch(`${API}/order/create`, {
         method: 'POST',
-        headers: DISPATCHER_HEADERS,
+        headers: getDispHeaders(),
         body: JSON.stringify(form),
       });
       const data = await res.json();
@@ -309,12 +358,12 @@ export default function App() {
     try {
       await fetch(`${API}/order/assign`, {
         method: 'POST',
-        headers: DISPATCHER_HEADERS,
+        headers: getDispHeaders(),
         body: JSON.stringify({ order_id: orderId, driver_id: driverId })
       });
       await fetch(`${API}/order/send-to-driver`, {
         method: 'POST',
-        headers: DISPATCHER_HEADERS,
+        headers: getDispHeaders(),
         body: JSON.stringify({ order_id: orderId, driver_id: driverId })
       });
 
@@ -342,7 +391,7 @@ export default function App() {
       if (statusCheckerRef.current) clearInterval(statusCheckerRef.current);
       statusCheckerRef.current = setInterval(async () => {
         try {
-          const res = await fetch(`${API}/order/all?active=true`, { headers: DISPATCHER_HEADERS });
+          const res = await fetch(`${API}/order/all?active=true`, { headers: getDispHeaders() });
           const data = await res.json();
           const order = data.orders.find(o => o.id === orderId);
           if (order && order.status !== 'assigned') {
@@ -387,6 +436,76 @@ export default function App() {
     return `${d.getDate()}.${d.getMonth() + 1}.${d.getFullYear()} ${d.getHours()}:${d.getMinutes() < 10 ? '0' : ''}${d.getMinutes()}`;
   };
 
+  // ===================== AUTH EKRANI =====================
+  if (!dispToken) {
+    return (
+      <div className="min-h-screen bg-blue-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm">
+          <h1 className="text-2xl font-bold text-center text-blue-600 mb-6">🚖 TaxiPark Dispetcher</h1>
+
+          <div className="flex mb-6 border rounded-xl overflow-hidden">
+            <button
+              onClick={() => setAuthScreen('login')}
+              className={`flex-1 py-2 font-bold text-sm transition ${authScreen === 'login' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+            >Kirish</button>
+            <button
+              onClick={() => setAuthScreen('register')}
+              className={`flex-1 py-2 font-bold text-sm transition ${authScreen === 'register' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+            >Ro'yxatdan o'tish</button>
+          </div>
+
+          {authScreen === 'login' ? (
+            <div className="space-y-3">
+              <input
+                className="w-full border rounded-lg p-3 text-sm focus:outline-none focus:border-blue-400"
+                placeholder="Username"
+                value={loginForm.username}
+                onChange={e => setLoginForm({ ...loginForm, username: e.target.value })}
+              />
+              <input
+                type="password"
+                className="w-full border rounded-lg p-3 text-sm focus:outline-none focus:border-blue-400"
+                placeholder="Parol"
+                value={loginForm.password}
+                onChange={e => setLoginForm({ ...loginForm, password: e.target.value })}
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+              />
+              <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition">
+                Kirish
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <input
+                className="w-full border rounded-lg p-3 text-sm focus:outline-none focus:border-blue-400"
+                placeholder="Ism Familiya"
+                value={regForm.full_name}
+                onChange={e => setRegForm({ ...regForm, full_name: e.target.value })}
+              />
+              <input
+                className="w-full border rounded-lg p-3 text-sm focus:outline-none focus:border-blue-400"
+                placeholder="Username"
+                value={regForm.username}
+                onChange={e => setRegForm({ ...regForm, username: e.target.value })}
+              />
+              <input
+                type="password"
+                className="w-full border rounded-lg p-3 text-sm focus:outline-none focus:border-blue-400"
+                placeholder="Parol (kamida 6 ta belgi)"
+                value={regForm.password}
+                onChange={e => setRegForm({ ...regForm, password: e.target.value })}
+                onKeyDown={e => e.key === 'Enter' && handleRegister()}
+              />
+              <button onClick={handleRegister} className="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">
+                Ro'yxatdan o'tish
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const periodLabel = { today: 'Bugun', week: 'Bu hafta', month: 'Bu oy', year: 'Bu yil' };
   const driversOnMap = drivers.filter(d => d.latitude && d.longitude);
 
@@ -410,14 +529,17 @@ export default function App() {
           </button>
           <h1 className="text-2xl font-bold">🚖 TaxiPark Dispetcher Panel</h1>
         </div>
-        <div className="flex gap-4 items-center">
+        <div className="flex gap-3 items-center">
           <span className="bg-green-500 px-3 py-1 rounded-full text-sm font-bold">
             🟢 Online: {drivers.filter(d => d.is_online).length}
           </span>
           <span className="bg-orange-500 px-3 py-1 rounded-full text-sm font-bold">
             📋 Yangi: {orders.filter(o => o.status === 'new').length}
           </span>
-
+          <span className="text-blue-200 text-sm">👤 {dispUser?.full_name || dispUser?.username}</span>
+          <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg text-sm font-bold transition">
+            Chiqish
+          </button>
         </div>
       </div>
 
