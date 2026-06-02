@@ -190,9 +190,24 @@ const getDriverOrders = async (req, res) => {
 // Barcha buyurtmalar (dispetcher)
 const getAllOrders = async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM orders ORDER BY created_at DESC'
-    );
+    const { active, status, limit = 100, page = 1 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let query, params;
+
+    if (active === 'true') {
+      // Faqat tugallanmagan buyurtmalar — pagination shart emas
+      query = `SELECT * FROM orders WHERE status != 'finished' ORDER BY created_at DESC`;
+      params = [];
+    } else if (status === 'finished') {
+      query = `SELECT * FROM orders WHERE status = 'finished' ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
+      params = [parseInt(limit), offset];
+    } else {
+      query = `SELECT * FROM orders ORDER BY created_at DESC LIMIT $1 OFFSET $2`;
+      params = [parseInt(limit), offset];
+    }
+
+    const result = await pool.query(query, params);
     res.json({ orders: result.rows });
   } catch (error) {
     res.status(500).json({ message: 'Server xatosi!', error: error.message });
