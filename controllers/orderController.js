@@ -128,10 +128,18 @@ const acceptOrder = async (req, res) => {
   try {
     const { order_id } = req.body;
 
-    await pool.query(
-      'UPDATE orders SET status = $1 WHERE id = $2',
-      ['accepted', order_id]
+    // Faqat shu haydovchiga assigned bo'lgan va hali accepted bo'lmagan buyurtmani qabul qilish
+    // Bu ikki haydovchi bir vaqtda qabul qilishiga yo'l qo'ymaydi
+    const result = await pool.query(
+      `UPDATE orders SET status = 'accepted'
+       WHERE id = $1 AND status = 'assigned' AND driver_id = $2
+       RETURNING id`,
+      [order_id, req.driver.id]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(409).json({ message: 'Bu buyurtma allaqachon qabul qilingan yoki sizga tegishli emas!' });
+    }
 
     res.json({ message: 'Zakaz qabul qilindi!' });
   } catch (error) {

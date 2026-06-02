@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const dispatcherMiddleware = require('../middleware/dispatcherMiddleware');
 const { broadcastMessage, getMyMessages, markAllRead, savePushToken } = require('../controllers/messageController');
 
 // Dispetcher — barcha haydovchilarga xabar yuborish
-router.post('/broadcast', broadcastMessage);
+router.post('/broadcast', dispatcherMiddleware, broadcastMessage);
 
 // Haydovchi — o'z xabarlarini olish
 router.get('/my', authMiddleware, getMyMessages);
