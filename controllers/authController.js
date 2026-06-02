@@ -1,6 +1,21 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { TARIFF_PLANS } = require('../constants');
+
+// Tarif kolonlarini qo'shish va mavjud haydovchilarga per_order o'rnatish
+const initTariffColumns = async () => {
+  await pool.query(`
+    ALTER TABLE drivers
+    ADD COLUMN IF NOT EXISTS tariff_type VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS tariff_expires_at TIMESTAMP
+  `);
+  // Mavjud haydovchilar avtomatik per_order tarifiga o'tadi
+  await pool.query(`
+    UPDATE drivers SET tariff_type = 'per_order' WHERE tariff_type IS NULL
+  `);
+};
+initTariffColumns().catch(err => console.error('Tariff init xatosi:', err));
 
 // Telefon raqam formati tekshirish: +998XXXXXXXXX
 const isValidPhone = (phone) => /^\+998\d{9}$/.test(phone);
@@ -99,7 +114,9 @@ const login = async (req, res) => {
         phone: driver.phone,
         car_model: driver.car_model,
         car_number: driver.car_number,
-        is_blocked: driver.is_blocked
+        is_blocked: driver.is_blocked,
+        tariff_type: driver.tariff_type,
+        tariff_expires_at: driver.tariff_expires_at,
       }
     });
   } catch (error) {

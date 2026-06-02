@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
+const { TARIFF_PLANS } = require('../constants');
 
 const initSettings = async () => {
   await pool.query(`
@@ -139,6 +140,44 @@ const deleteDispatcher = async (req, res) => {
   }
 };
 
+const activateDriverTariff = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tariff_type } = req.body;
+    const plan = TARIFF_PLANS.find(p => p.id === tariff_type);
+    if (!plan) return res.status(400).json({ message: 'Noto\'g\'ri tarif turi!' });
+
+    let expires_at = null;
+    if (plan.duration_hours) {
+      expires_at = new Date(Date.now() + plan.duration_hours * 60 * 60 * 1000);
+    }
+
+    const result = await pool.query(
+      'UPDATE drivers SET tariff_type = $1, tariff_expires_at = $2 WHERE id = $3 RETURNING full_name, phone',
+      [tariff_type, expires_at, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: 'Haydovchi topilmadi!' });
+
+    if (global.connectedDrivers && global.io) {
+      const socketId = global.connectedDrivers[parseInt(id)];
+      if (socketId) {
+        global.io.to(socketId).emit('tariff_activated', {
+          tariff_type,
+          tariff_expires_at: expires_at,
+        });
+      }
+    }
+
+    res.json({
+      message: `${result.rows[0].full_name} uchun ${plan.name} tarifi faollashtirildi!`,
+      tariff_type,
+      tariff_expires_at: expires_at,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server xatosi!', error: error.message });
+  }
+};
+
 module.exports = {
   getAllDrivers,
   blockDriver,
@@ -148,4 +187,5 @@ module.exports = {
   resetDispatcherPassword,
   resetDriverPassword,
   deleteDispatcher,
+  activateDriverTariff,
 };

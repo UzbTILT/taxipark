@@ -14,4 +14,11 @@ const calcKmPrice = (km, isNight) => {
   return r.first + r.second + (km - 2) * r.rest;
 };
 
-module.exports = { BASE_PRICE, COMPANY_SHARE, PAUSE_PRICE_PER_MIN, WAITING_FREE_MINUTES, WAITING_PRICE_PER_MIN, DAY_RATES, NIGHT_RATES, calcKmPrice };
+const TARIFF_PLANS = [
+  { id: 'per_order', name: 'Donali',       price: 0,     duration_hours: null, description: 'Har reysdan 900 so\'m' },
+  { id: 'half_day',  name: 'Yarim kunlik', price: 11000, duration_hours: 12   },
+  { id: 'daily',     name: 'Kunlik',       price: 22000, duration_hours: 24   },
+  { id: 'monthly',   name: 'Oylik',        price: 29900, duration_hours: 720  },
+];
+
+module.exports = { BASE_PRICE, COMPANY_SHARE, PAUSE_PRICE_PER_MIN, WAITING_FREE_MINUTES, WAITING_PRICE_PER_MIN, DAY_RATES, NIGHT_RATES, calcKmPrice, TARIFF_PLANS };
