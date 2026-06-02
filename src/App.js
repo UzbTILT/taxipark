@@ -148,7 +148,9 @@ export default function App() {
       const res = await fetch(`${API}/order/all?active=true`, { headers: DISPATCHER_HEADERS });
       const data = await res.json();
       setOrders(data.orders);
-    } catch (err) {}
+    } catch (err) {
+      console.error('Buyurtmalarni yuklashda xato:', err);
+    }
   };
 
   const fetchDrivers = async () => {
@@ -156,7 +158,9 @@ export default function App() {
       const res = await fetch(`${API}/admin/drivers`, { headers: ADMIN_HEADERS });
       const data = await res.json();
       setDrivers(data.drivers);
-    } catch (err) {}
+    } catch (err) {
+      console.error('Haydovchilarni yuklashda xato:', err);
+    }
   };
 
   const fetchStats = async (period) => {
@@ -190,7 +194,9 @@ export default function App() {
       const avgPrice = totalOrders > 0 ? Math.round(totalEarned / totalOrders) : 0;
 
       setStats({ totalOrders, totalEarned, companyAmount, driversAmount, avgPrice });
-    } catch (err) {}
+    } catch (err) {
+      console.error('Statistikani yuklashda xato:', err);
+    }
   };
 
   const fetchHistory = async () => {
@@ -199,7 +205,9 @@ export default function App() {
       const data = await res.json();
       const finished = (data.orders || []);
       setHistory(finished);
-    } catch (err) {}
+    } catch (err) {
+      console.error('Tarixni yuklashda xato:', err);
+    }
   };
 
   const toggleBlock = async (driver) => {
@@ -210,7 +218,9 @@ export default function App() {
         body: JSON.stringify({ is_blocked: !driver.is_blocked })
       });
       fetchDrivers();
-    } catch (err) {}
+    } catch (err) {
+      alert('Xato! Haydovchi holati o\'zgarmadi.');
+    }
   };
 
   const sendBroadcast = async () => {
@@ -224,7 +234,9 @@ export default function App() {
       setBroadcastSent(true);
       setBroadcastMsg('');
       setTimeout(() => setBroadcastSent(false), 3000);
-    } catch (err) {}
+    } catch (err) {
+      alert('Xato! Xabar yuborilmadi.');
+    }
   };
 
   const getDistance = (lat1, lon1, lat2, lon2) => {
@@ -334,7 +346,9 @@ export default function App() {
           if (order && order.status !== 'assigned') {
             stopAllTimers(); setSentOrder(null); setCountdown(0); fetchOrders();
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('Buyurtma holati tekshirishda xato:', e);
+        }
       }, 3000);
     } catch (err) {
       alert('Xato!');
