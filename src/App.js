@@ -105,15 +105,17 @@ export default function App() {
   useEffect(() => {
     fetchOrders();
     fetchDrivers();
-    const interval = setInterval(() => {
-      fetchOrders();
-      fetchDrivers();
-    }, 5000);
+    // Haydovchi lokatsiyalari uchun 10 sekundda bir yangilaymiz
+    const interval = setInterval(() => fetchDrivers(), 10000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     socketRef.current = io(SOCKET_URL);
+
+    // Buyurtma holati o'zgarganda — darhol yangilash
+    socketRef.current.on('orders_updated', () => fetchOrders());
+
     socketRef.current.on('order_rejected', (data) => {
       setRejectedMsg(`❌ ${data.driver_name} rad etdi!`);
       stopAllTimers();
