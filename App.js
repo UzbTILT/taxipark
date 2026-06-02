@@ -558,7 +558,8 @@ export default function App() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const { total_price, pause_price, waiting_fee, is_night } = res.data;
+      const { total_price, company_share: cs, pause_price, waiting_fee, is_night } = res.data;
+      const company_share = cs ?? COMPANY_SHARE;
       const kmPrice = total_price - BASE_PRICE - (pause_price || 0) - (waiting_fee || 0) - extraTotal;
 
       let alertMsg = `${is_night ? '🌙 Tun narxi' : '☀️ Kunduz narxi'}\n`;
@@ -577,10 +578,12 @@ export default function App() {
           alertMsg += `${s.emoji} ${s.label}: +${s.price.toLocaleString()} so'm\n`;
         });
       }
-      alertMsg += `🏢 Kompaniya: ${COMPANY_SHARE.toLocaleString()} so'm\n`;
+      if (company_share > 0) {
+        alertMsg += `🏢 Kompaniya: ${company_share.toLocaleString()} so'm\n`;
+      }
       alertMsg += `━━━━━━━━━━━━━━\n`;
       alertMsg += `💵 JAMI: ${total_price.toLocaleString()} so'm\n`;
-      alertMsg += `👤 Sizniki: ${(total_price - COMPANY_SHARE).toLocaleString()} so'm`;
+      alertMsg += `👤 Sizniki: ${(total_price - company_share).toLocaleString()} so'm`;
 
       Alert.alert('Reys tugadi! ✅', alertMsg);
 
