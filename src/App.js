@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 
 const API = process.env.REACT_APP_API_URL || 'https://taxipark-production.up.railway.app/api';
-const ADMIN_HEADERS = {
-  'Content-Type': 'application/json',
-  'x-admin-key': process.env.REACT_APP_ADMIN_KEY || '',
-};
 
 export default function App() {
+  const [adminKey, setAdminKey] = useState(() => localStorage.getItem('admin_key') || '');
+  const [keyInput, setKeyInput] = useState('');
+  const [keyError, setKeyError] = useState('');
+
   const [tab, setTab] = useState('system');
   const [systemOnline, setSystemOnline] = useState(true);
   const [toggling, setToggling] = useState(false);
@@ -21,12 +21,41 @@ export default function App() {
   const [dispResetId, setDispResetId] = useState(null);
   const [dispNewPass, setDispNewPass] = useState('');
 
-  useEffect(() => { fetchStatus(); }, []);
+  const ADMIN_HEADERS = {
+    'Content-Type': 'application/json',
+    'x-admin-key': adminKey,
+  };
 
   useEffect(() => {
+    if (adminKey) fetchStatus();
+  }, [adminKey]);
+
+  useEffect(() => {
+    if (!adminKey) return;
     if (tab === 'drivers') fetchDrivers();
     if (tab === 'dispatchers') fetchDispatchers();
-  }, [tab]);
+  }, [tab, adminKey]);
+
+  const handleLogin = async () => {
+    if (!keyInput.trim()) { setKeyError('Kalit kiriting!'); return; }
+    try {
+      const res = await fetch(`${API}/admin/system-status`, {
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': keyInput.trim() },
+      });
+      if (res.status === 401) { setKeyError('Admin kaliti noto\'g\'ri!'); return; }
+      localStorage.setItem('admin_key', keyInput.trim());
+      setAdminKey(keyInput.trim());
+      setKeyError('');
+    } catch {
+      setKeyError('Server bilan bog\'lanib bo\'lmadi!');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('admin_key');
+    setAdminKey('');
+    setKeyInput('');
+  };
 
   const fetchStatus = async () => {
     try {
@@ -169,17 +198,50 @@ export default function App() {
     { key: 'dispatchers', label: '👤 Dispetcherlar' },
   ];
 
+  // ── LOGIN EKRANI ──
+  if (!adminKey) {
+    return (
+      <div className="min-h-screen bg-blue-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-sm">
+          <h1 className="text-2xl font-bold text-center text-blue-700 mb-2">🚖 TaxiPark</h1>
+          <p className="text-center text-gray-400 text-sm mb-6">Admin panel</p>
+          <input
+            type="password"
+            className="w-full border rounded-lg p-3 text-sm focus:outline-none focus:border-blue-400 mb-2"
+            placeholder="Admin kalitini kiriting..."
+            value={keyInput}
+            onChange={e => { setKeyInput(e.target.value); setKeyError(''); }}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            autoFocus
+          />
+          {keyError && <p className="text-red-500 text-sm mb-2">{keyError}</p>}
+          <button
+            onClick={handleLogin}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition"
+          >
+            Kirish
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ASOSIY PANEL ──
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* HEADER */}
       <div className="bg-blue-700 text-white px-6 py-4 flex items-center gap-4 shadow">
         <span className="text-2xl font-bold">🚖 TaxiPark Admin</span>
         <span className={`ml-auto text-sm font-bold px-3 py-1 rounded-full ${systemOnline ? 'bg-green-500' : 'bg-red-500'}`}>
-          {systemOnline ? '🟢 Tizim yoqiq' : '🔴 Tizim o\'chiq'}
+          {systemOnline ? '🟢 Yoqiq' : '🔴 O\'chiq'}
         </span>
+        <button
+          onClick={handleLogout}
+          className="bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg text-sm font-bold transition"
+        >
+          Chiqish
+        </button>
       </div>
 
-      {/* TABS */}
       <div className="flex bg-white border-b shadow-sm">
         {TABS.map(t => (
           <button
@@ -217,10 +279,7 @@ export default function App() {
             >
               {toggling ? '⏳ Kutilmoqda...' : systemOnline ? '⛔ O\'CHIRISH' : '✅ YOQISH'}
             </button>
-            <button
-              onClick={fetchStatus}
-              className="mt-4 text-sm text-blue-500 hover:underline"
-            >
+            <button onClick={fetchStatus} className="mt-4 text-sm text-blue-500 hover:underline">
               🔄 Holatni yangilash
             </button>
           </div>
@@ -233,7 +292,6 @@ export default function App() {
               <h2 className="text-lg font-bold text-gray-700">🚗 Haydovchilar ({drivers.length})</h2>
               <button onClick={fetchDrivers} className="text-sm text-blue-500 hover:underline">🔄 Yangilash</button>
             </div>
-
             {driversLoading ? (
               <p className="text-center text-gray-400 py-8">Yuklanmoqda...</p>
             ) : drivers.length === 0 ? (
@@ -249,9 +307,7 @@ export default function App() {
                       <p className="text-sm text-gray-500">📞 {driver.phone}</p>
                       <p className="text-sm text-gray-500">🚗 {driver.car_model} — {driver.car_number}</p>
                       <p className="text-xs text-gray-400">📅 {formatDate(driver.created_at)}</p>
-                      {driver.is_blocked && (
-                        <span className="text-xs text-red-500 font-bold">⛔ Bloklangan</span>
-                      )}
+                      {driver.is_blocked && <span className="text-xs text-red-500 font-bold">⛔ Bloklangan</span>}
                     </div>
                     <div className="flex flex-col gap-2 items-end">
                       <button
@@ -270,7 +326,6 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-
                   {driverResetId === driver.id && (
                     <div className="mt-3 pt-3 border-t flex gap-2">
                       <input
@@ -309,7 +364,6 @@ export default function App() {
               <h2 className="text-lg font-bold text-gray-700">👤 Dispetcherlar ({dispatchers.length})</h2>
               <button onClick={fetchDispatchers} className="text-sm text-blue-500 hover:underline">🔄 Yangilash</button>
             </div>
-
             {dispLoading ? (
               <p className="text-center text-gray-400 py-8">Yuklanmoqda...</p>
             ) : dispatchers.length === 0 ? (
@@ -338,7 +392,6 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-
                   {dispResetId === disp.id && (
                     <div className="mt-3 pt-3 border-t flex gap-2">
                       <input
